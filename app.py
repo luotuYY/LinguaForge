@@ -238,6 +238,13 @@ def _extract_api_config(data: dict) -> dict:
 # ── 路由 ──
 
 
+@app.after_request
+def _no_cache(response):
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 @app.route("/")
 def index():
     return send_from_directory("static", "index.html")

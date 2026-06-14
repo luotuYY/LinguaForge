@@ -48,8 +48,8 @@
         <span class="search-count" id="previewSearchCount"></span>
         <input class="search-input" id="previewSearch" placeholder="搜索..." oninput="onPreviewSearch()">
         <span class="search-clear" onclick="clearPreviewSearch()">×</span>
-        <input type="checkbox" id="selectAllPreview" onclick="toggleSelectAllPreview()" title="全选/取消当前预览条目" style="display:none">
         <button class="btn btn-sm" id="btnTranslatePreviewSel" onclick="translatePreviewSelected()" style="display:none" disabled>译</button>
+        <input type="checkbox" id="selectAllPreview" onclick="toggleSelectAllPreview()" title="全选/取消当前预览条目" style="display:none">
       </div>
     </div>
     <div class="card-body" id="cardPreview">
@@ -106,9 +106,9 @@
         </div>
         <div id="apiConfigPanel" style="display:none; margin-top:8px;">
           <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
-            <input type="text" id="apiBase" placeholder="API Base URL" style="flex:2; min-width:180px;" class="param-input">
-            <input type="password" id="apiKey" placeholder="API Key" style="flex:2; min-width:180px;" class="param-input">
-            <input type="text" id="modelName" placeholder="Model Name" style="flex:1; min-width:120px;" class="param-input">
+            <input type="text" id="apiBase" placeholder="API Base URL" style="flex:2; min-width:180px;" class="param-input" oninput="saveApiConfig()">
+            <input type="password" id="apiKey" placeholder="API Key" style="flex:2; min-width:180px;" class="param-input" oninput="saveApiConfig()">
+            <input type="text" id="modelName" placeholder="Model Name" style="flex:1; min-width:120px;" class="param-input" oninput="saveApiConfig()">
             <button class="btn btn-sm" onclick="testApiConnection()">测试连接</button>
           </div>
           <div style="font-size:0.7rem; color:var(--text-muted);">
@@ -117,7 +117,7 @@
           </div>
           <div style="margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06); display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
             <label style="display:flex; align-items:center; gap:4px; font-size:0.73rem; color:var(--text-secondary); cursor:pointer;">
-              <input type="checkbox" id="enableThinking" onchange="onThinkingChange()" style="accent-color:var(--accent);">
+              <input type="checkbox" id="enableThinking" onchange="onThinkingChange();saveApiConfig()" style="accent-color:var(--accent);">
               启用思考/推理（关闭可提速）
             </label>
             <span style="font-size:0.68rem; color:var(--text-muted);" title="使用 deepseek-chat 而非 deepseek-reasoner 可避免推理耗时；降低 max_tokens 和 Temperature 也可提速。">
@@ -188,6 +188,7 @@ const state = {
   _lastTranslateMode: '',  // 上一次批量翻译时使用的模式，用于检测模式切换
   previewChecked: new Set(),  // 预览栏中被勾选的条目索引集合,
   llmProvider: 'local',  // 'local' | 'commercial'，默认本地LLM
+  compareChecked: new Set(),  // ??????????????
 };
 
 const $ = id => document.getElementById(id);
@@ -265,9 +266,9 @@ function log(msg, cls) {
              now.getSeconds().toString().padStart(2,'0');
   const line = document.createElement('div');
   line.className = 'log-line';
-  line.innerHTML = `<span class="ts">${ts}</span><span class="${cls||''}">${escHtml(msg)}</span>`;
+  line.innerHTML = '<span class="ts">' + ts + '</span><span class="' + (cls||'') + '">' + escHtml(msg) + '</span>';
   logArea.appendChild(line);
-  logArea.scrollTop = logArea.scrollHeight;
+  logArea.scrollTop = 0;
 }
 function clearLog() { logArea.innerHTML = ''; logArea.classList.remove('visible'); }
 
@@ -343,13 +344,15 @@ function getApiConfig() {
 }
 
 function loadApiConfig() {
-  var cfg = JSON.parse(localStorage.getItem('tllmh_api_config') || '{}');
+  var cfg;
+  try { cfg = JSON.parse(localStorage.getItem('tllmh_api_config') || '{}'); } catch(e) { cfg = {}; }
   $('apiBase').value = cfg.api_base || '';
   $('apiKey').value = cfg.api_key || '';
   $('modelName').value = cfg.model || '';
   var thinkingEl = $('enableThinking');
   if (thinkingEl) {
-    thinkingEl.checked = cfg.enable_thinking !== undefined ? cfg.enable_thinking : false;
+    // 不触发 onchange 事件，避免打开面板时弹toast
+    thinkingEl.checked = cfg.enable_thinking === true;
   }
 }
 function saveApiConfig() {
@@ -357,7 +360,7 @@ function saveApiConfig() {
     api_base: $('apiBase').value.trim(),
     api_key: $('apiKey').value.trim(),
     model: $('modelName').value.trim(),
-    enable_thinking: $('enableThinking') ? $('enableThinking').checked : true,
+    enable_thinking: $('enableThinking') ? $('enableThinking').checked : false,
   };
   localStorage.setItem('tllmh_api_config', JSON.stringify(cfg));
 }
@@ -375,8 +378,16 @@ function toggleApiConfig() {
   }
 }
 async function testApiConnection() {
+  saveApiConfig();
   var apiConfig = getApiConfig();
-  if (!apiConfig.api_base) { showToast('请先填写 API Base URL'); return; }
+  if (!apiConfig.api_base) {
+    // 本地模式且未填商业API，测试本地地址
+    if (state.llmProvider === 'local') {
+      apiConfig = {};
+    } else {
+      showToast('请先填写 API Base URL'); return;
+    }
+  }
   try {
     var r = await fetch('/api/check-llm', {
       method: 'POST',
@@ -384,8 +395,9 @@ async function testApiConnection() {
       body: JSON.stringify(apiConfig)
     });
     var d = await r.json();
-    if (d.status === 'connected') showToast('✅ 连接成功');
-    else showToast('❌ 连接失败: ' + (d.detail || '未知错误'));
+    var isLocal = state.llmProvider === 'local';
+    if (d.status === 'connected') showToast(isLocal ? '✅ 本地连接成功' : '✅ 连接成功');
+    else showToast(isLocal ? '❌ 本地连接失败: ' + (d.detail || '未知错误') : '❌ 商业API连接失败: ' + (d.detail || '未知错误'));
   } catch(e) {
     showToast('请求失败: ' + e.message);
   }
@@ -449,12 +461,21 @@ function onThinkingChange() {
   var btnC = $('btnCommercial');
   if (btnL) btnL.className = saved === 'local' ? 'btn btn-sm segmented-btn active' : 'btn btn-sm segmented-btn';
   if (btnC) btnC.className = saved === 'commercial' ? 'btn btn-sm segmented-btn active' : 'btn btn-sm segmented-btn';
+  // 商业模式下预先加载 API 配置，避免 checkLLM 时字段为空
+  if (saved === 'commercial') {
+    try { loadApiConfig(); } catch(e) { console.error('loadApiConfig failed:', e); }
+  }
 })();
 async function checkLLM() {
   try {
+    var providerLabel = state.llmProvider === 'local' ? '本地' : '商业';
     var apiConfig = getApiConfig();
     if (state.llmProvider === 'local') {
       apiConfig = { provider: 'local' };
+    } else if (!apiConfig.api_base) {
+      // 商业模式下未配置 API 地址，不回退到本地检测
+      llmStatus.innerHTML = '<span class="dot dot-err"></span><span class="status-text">'+providerLabel+' LLM 未配置</span>';
+      return;
     }
     const r = await fetch('/api/check-llm', {
       method: 'POST',
@@ -462,7 +483,6 @@ async function checkLLM() {
       body: JSON.stringify(apiConfig)
     });
     const d = await r.json();
-    var providerLabel = state.llmProvider === 'local' ? '本地' : '商业';
     llmStatus.innerHTML = d.status === 'connected'
       ? '<span class="dot dot-ok"></span><span class="status-text">'+providerLabel+' LLM 已连接</span>'
       : '<span class="dot dot-err"></span><span class="status-text">'+providerLabel+' LLM 未连接</span>';
@@ -695,7 +715,7 @@ function renderPreview() {
           <button class="btn" onclick="translateOne(${l.index}, event)" ${state.translating?'disabled':''}>译</button>
         </span>
         <span class="line-check-wrap">
-          <input type="checkbox" class="preview-check" data-index="${l.index}" onclick="updateSelectAllPreview()" ${state.previewChecked.has(l.index) ? 'checked' : ''}>
+          <input type="checkbox" class="preview-check" data-index="${l.index}" onclick="onPreviewCheck(this)" ${state.previewChecked.has(l.index) ? 'checked' : ''}>
         </span>
       </div>`;
     });
@@ -709,6 +729,7 @@ $('previewSearchCount').textContent = q
     ? '前200行'
     : `${state.lines.length} 行`;
 updatePreviewSelectAllVisibility();
+  updateSelectAllPreview();
 }
 
 // ===== 单行翻译 =====
@@ -742,6 +763,7 @@ function enterTranslatingState() {
   btnClearAll.disabled = true;
   btnStop.disabled = false;
   updatePreviewSelectAllVisibility();
+  updateSelectAllPreview();
 }
 // helper: exit translating state (restore buttons)
 function exitTranslatingState() {
@@ -817,7 +839,7 @@ function renderCompare() {
     rows.forEach(l => {
       const rowCls = (l.error ? 'row-error' : '') + (l.keepOld ? ' row-keep' : '');
       compareHtml += `<tr class="${rowCls}">
-        <td class="col-check"><input type="checkbox" class="row-check" data-index="${l.index}" onclick="updateSelectAllCompare()"></td>
+        <td class="col-check"><input type="checkbox" class="row-check" data-index="${l.index}" onclick="onCompareCheck(this)" ${state.compareChecked.has(l.index) ? "checked" : ""}></td>
         <td class="cell-copyable" onclick="copyOriginal(event)" title="点击复制">${hl(l.original)}</td>
         <td>${l.translation ? hl(l.translation) : '—'}</td>
         <td class="cell-editable" onclick="editTranslation(${l.index},event)" title="点击编辑">${l.error ? '⚠'+escHtml(l.error) : l.new_translation === ' ' ? '<span class="cleared-mark">—</span>' : hl(l.new_translation)}</td>
@@ -832,6 +854,7 @@ function renderCompare() {
     cardCompare.innerHTML = compareHtml;
   }
   if (q) $('compareSearchCount').textContent = `${shown} 条匹配`;
+  updateSelectAllCompare();
 }
 
 // ===== 预览栏复选框 =====
@@ -842,6 +865,12 @@ function updatePreviewSelectAllVisibility() {
   if (master) master.style.display = hasLines ? '' : 'none';
   if (btn) { btn.style.display = hasLines ? '' : 'none'; btn.disabled = state.translating; }
 }
+function onPreviewCheck(cb) {
+  var idx = parseInt(cb.dataset.index);
+  if (cb.checked) { state.previewChecked.add(idx); }
+  else { state.previewChecked.delete(idx); }
+  updateSelectAllPreview();
+}
 function toggleSelectAllPreview() {
   var master = document.getElementById('selectAllPreview');
   if (!master) return;
@@ -849,22 +878,30 @@ function toggleSelectAllPreview() {
   checks.forEach(function(cb) {
     cb.checked = master.checked;
     var idx = parseInt(cb.dataset.index);
-    if (master.checked) state.previewChecked.add(idx);
-    else state.previewChecked.delete(idx);
+    if (master.checked) { state.previewChecked.add(idx); }
+    else { state.previewChecked.delete(idx); }
   });
 }
 function updateSelectAllPreview() {
-  var checks = document.querySelectorAll('.preview-check');
+  if (!state.lines.length) return;
+  var q = state.previewQuery;
+  var visible;
+  if (q) {
+    visible = state.lines.filter(function(l) {
+      return matches(l.original, q) || matches(l.translation, q) || matches(l.new_translation, q);
+    });
+  } else {
+    visible = state.lines.slice(0, 200);
+  }
+  if (!visible.length) return;
+  var allIndices = new Set();
+  visible.forEach(function(l) { allIndices.add(l.index); });
+  var checked = 0;
+  state.previewChecked.forEach(function(i) { if (allIndices.has(i)) checked++; });
   var master = document.getElementById('selectAllPreview');
   if (!master) return;
-  state.previewChecked.clear();
-  checks.forEach(function(cb) {
-    if (cb.checked) state.previewChecked.add(parseInt(cb.dataset.index));
-  });
-  var allChecked = checks.length > 0 && Array.from(checks).every(function(cb) { return cb.checked; });
-  var noneChecked = Array.from(checks).every(function(cb) { return !cb.checked; });
-  master.checked = allChecked;
-  master.indeterminate = !allChecked && !noneChecked;
+  master.checked = checked > 0 && checked === allIndices.size;
+  master.indeterminate = checked > 0 && checked < allIndices.size;
 }
 function getCheckedPreviewIndices() {
   return Array.from(state.previewChecked).sort(function(a, b) { return a - b; });
@@ -930,29 +967,43 @@ async function translatePreviewSelected() {
   if (!wasAborted) showToast('翻译完成：成功' + (total-errors) + '行' + (errors ? '，失败' + errors + '行' : ''));
 }
 
-// ===== 复选框 =====
-function toggleSelectAllCompare() {
-  const master = document.getElementById('selectAllCompare');
-  if (!master) return;
-  const checks = document.querySelectorAll('.row-check');
-  checks.forEach(function(cb) { cb.checked = master.checked; });
+
+// ===== ??? =====
+function onCompareCheck(cb) {
+  var idx = parseInt(cb.dataset.index);
+  if (cb.checked) { state.compareChecked.add(idx); }
+  else { state.compareChecked.delete(idx); }
+  updateSelectAllCompare();
 }
-function updateSelectAllCompare() {
-  var checks = document.querySelectorAll('.row-check');
+function toggleSelectAllCompare() {
   var master = document.getElementById('selectAllCompare');
   if (!master) return;
-  var allChecked = checks.length > 0 && Array.from(checks).every(function(cb) { return cb.checked; });
-  var noneChecked = Array.from(checks).every(function(cb) { return !cb.checked; });
-  master.checked = allChecked;
-  master.indeterminate = !allChecked && !noneChecked;
+  var checks = document.querySelectorAll('.row-check');
+  checks.forEach(function(cb) {
+    cb.checked = master.checked;
+    var idx = parseInt(cb.dataset.index);
+    if (master.checked) { state.compareChecked.add(idx); }
+    else { state.compareChecked.delete(idx); }
+  });
+}
+function updateSelectAllCompare() {
+  var checkable = state.lines.filter(function(l) { return l.new_translation || l.error; });
+  if (!checkable.length) return;
+  var allIndices = new Set(checkable.map(function(l) { return l.index; }));
+  var checked = 0;
+  state.compareChecked.forEach(function(i) { if (allIndices.has(i)) checked++; });
+  var master = document.getElementById('selectAllCompare');
+  if (!master) return;
+  master.checked = checked > 0 && checked === allIndices.size;
+  master.indeterminate = checked > 0 && checked < allIndices.size;
 }
 
-// ===== 复制选中行 =====
+// ===== ????? =====
 function getCheckedRows() {
-  var checks = document.querySelectorAll('.row-check:checked');
-  return Array.from(checks).map(function(cb) { return state.lines[parseInt(cb.dataset.index)]; }).filter(Boolean);
+  return state.lines.filter(function(l) { return state.compareChecked.has(l.index); });
 }
 function copySelectedRows() {
+  var rows = getCheckedRows();
   var rows = getCheckedRows();
   if (rows.length === 0) {
     var allChecks = document.querySelectorAll('.row-check');
@@ -975,8 +1026,18 @@ function deleteSelectedRows() {
   indices.sort(function(a, b) { return b - a; });
   for (var i = 0; i < indices.length; i++) {
     state.lines.splice(indices[i], 1);
+    state.compareChecked.delete(indices[i]);
+    state.previewChecked.delete(indices[i]);
   }
   for (var i = 0; i < state.lines.length; i++) { state.lines[i].index = i; }
+  // rebuild compareChecked with new indices
+  var newChecked = new Set();
+  state.lines.forEach(function(l) { if (state.compareChecked.has(l.index)) newChecked.add(l.index); });
+  state.compareChecked = newChecked;
+  // rebuild previewChecked with new indices
+  var newPreviewChecked = new Set();
+  state.lines.forEach(function(l) { if (state.previewChecked.has(l.index)) newPreviewChecked.add(l.index); });
+  state.previewChecked = newPreviewChecked;
   state.previewQuery = '';
   state.compareQuery = '';
   $('previewSearch').value = '';
@@ -1174,11 +1235,16 @@ function clearAllTranslations() {
   });
   var removed = before - state.lines.length;
   if (removed === 0) { showToast('没有可清除的条目'); return; }
-  state.previewChecked.clear();
-  var master = document.getElementById('selectAllPreview');
-  if (master) { master.checked = false; master.indeterminate = false; }
   // Re-index remaining lines
   for (var i = 0; i < state.lines.length; i++) { state.lines[i].index = i; }
+  // rebuild compareChecked with new indices
+  var newChecked = new Set();
+  state.lines.forEach(function(l) { if (state.compareChecked.has(l.index)) newChecked.add(l.index); });
+  state.compareChecked = newChecked;
+  // rebuild previewChecked with new indices
+  var newPreviewChecked = new Set();
+  state.lines.forEach(function(l) { if (state.previewChecked.has(l.index)) newPreviewChecked.add(l.index); });
+  state.previewChecked = newPreviewChecked;
   state.previewQuery = '';
   state.compareQuery = '';
   $('previewSearch').value = '';
@@ -1943,7 +2009,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   line-height: 1.5;
   display: none;
 }
-.log-area.visible { display: block; }
+.log-area.visible { display: flex; flex-direction: column-reverse; }
 .log-line { white-space: nowrap; }
 .log-line .ts { color: var(--text-muted); margin-right: 6px; }
 .log-line .err { color: var(--red); }
