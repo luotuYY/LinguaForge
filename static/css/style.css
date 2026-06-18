@@ -148,6 +148,28 @@ body {
 .toolbar .status-text { font-size: 0.78rem; color: var(--text-secondary); }
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
 
+/* 商业 API 配置条（工具栏下方，仅商业模式显示） */
+.toolbar-api-bar {
+  display: flex;
+  align-items: center;
+  padding: 6px 22px;
+  gap: 8px;
+  position: relative;
+  z-index: 10;
+  background: rgba(16,18,30,0.45);
+  backdrop-filter: blur(12px) saturate(1.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.1);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  flex-shrink: 0;
+}
+.toolbar-api-inner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
 /* ===== 按钮 ===== */
 .btn {
   display: inline-flex;
@@ -819,4 +841,229 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 .col-actions .btn {
   font-size: 0.72rem;
   padding: 3px 8px;
+}
+
+/* ===== SPA 页面容器 ===== */
+.page-container {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 5;
+}
+
+/* 导航高亮 */
+.nav-link.active {
+  color: #fff;
+  background: var(--accent);
+  box-shadow: 0 0 16px rgba(124,140,248,0.3);
+}
+
+/* ============================================================
+   分词页样式（原 tag.css，命名空间 #page-tag 防止污染翻译页）
+   ============================================================ */
+
+/* 收起按钮 - 整个工具栏绝对居中 */
+#page-tag .tag-collapse-bar {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  background: rgba(255,255,255,0.06);
+  border-radius: 6px;
+  padding: 4px 12px;
+  transition: all 0.2s;
+  user-select: none;
+  white-space: nowrap;
+  z-index: 11;
+}
+#page-tag .tag-collapse-bar:hover {
+  background: rgba(255,255,255,0.12);
+  color: var(--text);
+}
+#page-tag .tag-collapse-bar .collapse-title {
+  font-size: 0.68rem;
+}
+
+/* 页面容器 */
+#page-tag .tag-page {
+  position: relative;
+  z-index: 5;
+  height: calc(100vh - 56px);
+  overflow: hidden;
+  padding: 6px 14px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 上排 */
+#page-tag .tag-top-row {
+  flex-shrink: 0;
+  height: 35vh;
+  min-height: 0;
+  transition: height 0.25s ease, margin 0.25s ease, padding 0.25s ease;
+  overflow: hidden;
+}
+#page-tag .tag-top-row.collapsed {
+  height: 0 !important;
+  min-height: 0;
+  overflow: hidden;
+}
+#page-tag .tag-top-row.collapsed .tag-top-content { display: none; }
+
+/* 上排内容 */
+#page-tag .tag-top-content {
+  display: flex;
+  gap: 6px;
+  height: 100%;
+}
+#page-tag .tag-top-content > .card {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#page-tag .tag-top-content > .card > .card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* 控制栏 */
+#page-tag .tag-controls-row { flex-shrink: 0; }
+#page-tag .tag-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+#page-tag .tag-controls .btn { font-size: 0.78rem; }
+
+/* 分类结果 */
+#page-tag .tag-bottom-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#page-tag .tag-bottom-row > .card-header { flex-shrink: 0; }
+#page-tag .tag-bottom-row > .card-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 标签列容器 */
+#page-tag .tag-columns-container {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  height: 100%;
+  padding: 4px;
+}
+
+/* 单个标签列 */
+#page-tag .tag-column {
+  flex: 0 0 240px;
+  min-width: 220px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+}
+#page-tag .tag-column-untagged { flex: 0 0 280px; min-width: 260px; }
+
+/* 列头 */
+#page-tag .tag-column-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 0.82rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+#page-tag .tag-col-icon { font-size: 1.1rem; }
+#page-tag .tag-col-title { flex: 1; }
+#page-tag .tag-col-count {
+  background: rgba(255,255,255,0.08);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+/* 列体 */
+#page-tag .tag-column-body {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+#page-tag .tag-column-body.drag-over-col {
+  background: rgba(79,195,247,0.08);
+  border: 1px dashed rgba(79,195,247,0.3);
+  border-radius: 8px;
+}
+#page-tag .tag-column-empty {
+  text-align: center;
+  padding: 20px 12px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
+/* 标签卡片 */
+#page-tag .tag-card {
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  cursor: grab;
+  transition: all 0.2s;
+  position: relative;
+}
+#page-tag .tag-card:hover {
+  background: rgba(255,255,255,0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+#page-tag .tag-card.dragging { opacity: 0.4; cursor: grabbing; }
+#page-tag .tag-card-num { font-size: 0.65rem; color: var(--text-muted); margin-bottom: 3px; }
+#page-tag .tag-card-orig { font-size: 0.78rem; color: var(--text); line-height: 1.4; word-break: break-all; }
+#page-tag .tag-card-tran { font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px; word-break: break-all; }
+#page-tag .tag-card-tag { margin-top: 4px; font-size: 0.7rem; color: var(--text-muted); }
+#page-tag .tag-confidence { font-size: 0.65rem; color: var(--accent); opacity: 0.8; }
+#page-tag .tag-card-actions { position: absolute; top: 6px; right: 6px; opacity: 0; transition: opacity 0.2s; }
+#page-tag .tag-card:hover .tag-card-actions { opacity: 1; }
+
+/* 标签徽章 */
+#page-tag .tag-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; color: #fff; margin-left: 6px; vertical-align: middle; }
+
+/* 编辑下拉 */
+#page-tag .tag-edit-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--card); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+#page-tag .tag-edit-option { padding: 6px 10px; font-size: 0.78rem; cursor: pointer; transition: background 0.15s; }
+#page-tag .tag-edit-option:hover { background: rgba(79,195,247,0.15); }
+
+/* 进度条 */
+#page-tag .tag-progress-wrap { margin: 8px 0; }
+
+/* 分词页响应式 */
+@media (max-width: 900px) {
+  #page-tag .tag-top-content { flex-direction: column; }
+  #page-tag .tag-columns-container { flex-direction: column; overflow-x: hidden; overflow-y: auto; }
+  #page-tag .tag-column { max-width: none; min-width: auto; flex: none; }
 }

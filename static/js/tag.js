@@ -1,5 +1,7 @@
 /**
- * TxtLlmHub — 分词/标签模块（完全独立，不依赖 state.js / api.js / app.js）
+ * TxtLlmHub — 分词/标签模块（SPA 版本）
+ * [SPA改造] 移除重复的 setProvider/checkLLM（共用 state.js 中的全局版本）
+ * [SPA改造] 将自动初始化封装为 tagInit()，由 switchPage 懒调用
  * 只依赖 utils.js 的 $, escHtml, showToast, log 等纯工具函数
  */
 
@@ -34,83 +36,19 @@ function getAllSubCategories() {
   return r;
 }
 
-// ── API 配置（独立管理） ──
+// ── API 配置（SPA: 直接读取顶部工具栏的共享元素） ──
 function tagGetApiConfig() {
+  // 直接从顶部工具栏的共享 DOM 元素读取
   var cfg = {};
-  var base = document.getElementById('tagApiBase');
-  var key = document.getElementById('tagApiKey');
-  var model = document.getElementById('tagModelName');
+  var base = document.getElementById('apiBase');
+  var key = document.getElementById('apiKey');
+  var model = document.getElementById('modelName');
   if (base && base.value.trim()) cfg.api_base = base.value.trim();
   if (key && key.value.trim()) cfg.api_key = key.value.trim();
   if (model && model.value.trim()) cfg.model = model.value.trim();
+  var thinkingEl = document.getElementById('enableThinking');
+  if (thinkingEl) cfg.enable_thinking = thinkingEl.checked;
   return cfg;
-}
-
-function tagSaveApiConfig() {
-  var cfg = {
-    api_base: (document.getElementById('tagApiBase') || {}).value || '',
-    api_key: (document.getElementById('tagApiKey') || {}).value || '',
-    model: (document.getElementById('tagModelName') || {}).value || '',
-  };
-  localStorage.setItem('tllmh_tag_api', JSON.stringify(cfg));
-}
-
-function tagLoadApiConfig() {
-  try {
-    var cfg = JSON.parse(localStorage.getItem('tllmh_tag_api') || '{}');
-    var base = document.getElementById('tagApiBase');
-    var key = document.getElementById('tagApiKey');
-    var model = document.getElementById('tagModelName');
-    if (base) base.value = cfg.api_base || '';
-    if (key) key.value = cfg.api_key || '';
-    if (model) model.value = cfg.model || '';
-  } catch(e) {}
-}
-
-function tagToggleApiConfig() {
-  var panel = document.getElementById('tagApiConfigPanel');
-  var arrow = document.getElementById('tagApiConfigArrow');
-  if (panel.style.display === 'none') {
-    panel.style.display = 'block';
-    arrow.textContent = '▲';
-    tagLoadApiConfig();
-  } else {
-    panel.style.display = 'none';
-    arrow.textContent = '▼';
-    tagSaveApiConfig();
-  }
-}
-
-async function tagTestConnection() {
-  tagSaveApiConfig();
-  var cfg = tagGetApiConfig();
-  if (!cfg.api_base) { showToast('请先填写 API Base URL'); return; }
-  try {
-    var r = await fetch('/api/check-llm', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(cfg)
-    });
-    var d = await r.json();
-    showToast(d.status === 'connected' ? '✅ 连接成功' : '❌ 连接失败: ' + (d.detail || ''));
-  } catch(e) { showToast('请求失败: ' + e.message); }
-}
-
-// ── LLM 连接检测 ──
-async function tagCheckLLM() {
-  try {
-    var cfg = tagGetApiConfig();
-    var r = await fetch('/api/check-llm', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(cfg)
-    });
-    var d = await r.json();
-    var el = document.getElementById('llmStatus');
-    if (el) {
-      el.innerHTML = d.status === 'connected'
-        ? '<span class="dot dot-ok"></span><span class="status-text">LLM 已连接</span>'
-        : '<span class="dot dot-err"></span><span class="status-text">LLM 未连接</span>';
-    }
-  } catch(e) {}
 }
 
 // ── 文件上传 ──
@@ -218,7 +156,7 @@ function tagToggleCollapse() {
   _tagCollapsed = !_tagCollapsed;
   var row = document.getElementById('tagTopRow');
   var icon = document.getElementById('tagCollapseIcon');
-  var title = document.querySelector('.collapse-title');
+  var title = document.querySelector('#page-tag .collapse-title');
   if (_tagCollapsed) {
     row.classList.add('collapsed');
     icon.textContent = '▼';
@@ -333,6 +271,9 @@ function tagRenderColumns() {
   if (untagged.length === 0 && tagState.lines.length > 0) html += '<div class="tag-column-empty">所有词条已分类 ✓</div>';
   html += '</div></div>';
   container.innerHTML = html;
+  // 如果分类标签面板处于展开状态，同步刷新
+  var catPanel = document.getElementById('tagCatPanel');
+  if (catPanel && catPanel.style.display === 'flex') tagRenderCatPanel();
 }
 
 // ── 单条卡片更新（分词进行时不重建整个列表） ──
@@ -468,9 +409,9 @@ function tagEditFilter() {
   var q = document.getElementById('tagEditSearch').value.trim().toLowerCase();
   var dd = document.getElementById('tagEditDropdown');
   if (!q) { dd.style.display='none'; return; }
-  var matches = getAllSubCategories().filter(function(s){ return s.label.toLowerCase().indexOf(q)>=0 || s.l2.toLowerCase().indexOf(q)>=0; });
-  if (matches.length===0) { dd.style.display='none'; return; }
-  var h=''; matches.forEach(function(s){ h+='<div class="tag-edit-option" onclick="tagEditPick(\''+s.l1+'\',\''+s.l2+'\')"><span style="color:'+TAG_CATEGORIES[s.l1].color+'">'+escHtml(s.l1)+'</span> / '+escHtml(s.l2)+'</div>'; });
+  var matchItems = getAllSubCategories().filter(function(s){ return s.label.toLowerCase().indexOf(q)>=0 || s.l2.toLowerCase().indexOf(q)>=0; });
+  if (matchItems.length===0) { dd.style.display='none'; return; }
+  var h=''; matchItems.forEach(function(s){ h+='<div class="tag-edit-option" onclick="tagEditPick(\''+s.l1+'\',\''+s.l2+'\')"><span style="color:'+TAG_CATEGORIES[s.l1].color+'">'+escHtml(s.l1)+'</span> / '+escHtml(s.l2)+'</div>'; });
   dd.innerHTML=h; dd.style.display='block';
 }
 function tagEditPick(l1,l2) {
@@ -617,7 +558,7 @@ function tagExportSeparate() {
 }
 
 function tagTriggerDownload(name, content) {
-  var blob = new Blob([content], {type:'text/plain;charset=utf-8'});
+  var blob = new Blob([content],{type:'text/plain;charset=utf-8'});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a'); a.href=url; a.download=name; a.click();
   URL.revokeObjectURL(url);
@@ -657,32 +598,64 @@ function tagLog(msg, cls) {
 }
 function tagLogClear() { var a=document.getElementById('tagLogArea'); if(a){a.innerHTML='';a.classList.remove('visible');} }
 
-// ── Provider 切换 ──
-function setProvider(p) {
-  var btnL = document.getElementById('btnLocal');
-  var btnC = document.getElementById('btnCommercial');
-  if (btnL) btnL.className = p==='local' ? 'btn btn-sm segmented-btn active' : 'btn btn-sm segmented-btn';
-  if (btnC) btnC.className = p==='commercial' ? 'btn btn-sm segmented-btn active' : 'btn btn-sm segmented-btn';
-  tagCheckLLM();
-  showToast(p==='local' ? '已切换到本地LLM' : '已切换到商业API');
+// ── 分类标签面板（类似翻译页 System Prompt 折叠面板） ──
+function tagToggleCatPanel() {
+  var panel = document.getElementById('tagCatPanel');
+  var toggle = document.getElementById('tagCatToggle');
+  if (panel.style.display === 'flex') {
+    panel.style.display = 'none';
+    toggle.textContent = '分类标签 ▼';
+  } else {
+    panel.style.display = 'flex';
+    toggle.textContent = '分类标签 ▲';
+    tagRenderCatPanel();
+  }
 }
 
-// ── 初始化 ──
-(function() {
-  function init() {
-    var dz = document.getElementById('tagDropZone');
-    var fi = document.getElementById('tagFileInput');
-    if (dz && fi) {
-      dz.addEventListener('dragover', function(e){e.preventDefault();dz.classList.add('drag-over');});
-      dz.addEventListener('dragleave', function(){dz.classList.remove('drag-over');});
-      dz.addEventListener('click', function(){fi.click();});
-      dz.addEventListener('drop', function(e){e.preventDefault();dz.classList.remove('drag-over');if(e.dataTransfer.files.length>0)tagProcessFiles(e.dataTransfer.files);});
-      fi.addEventListener('change', function(){if(fi.files.length>0)tagProcessFiles(fi.files);});
-    }
-    tagCheckLLM();
-    setInterval(tagCheckLLM, 15000);
-    tagRenderColumns(); // 初始化空栏
+function tagRenderCatPanel() {
+  var panel = document.getElementById('tagCatPanel');
+  if (!panel) return;
+  var html = '';
+  Object.keys(TAG_CATEGORIES).forEach(function(l1) {
+    var cat = TAG_CATEGORIES[l1];
+    var count = tagState.lines.filter(function(l) { return l.tag_l1 === l1; }).length;
+    html += '<div class="tag-cat-group" style="border-left:3px solid ' + cat.color + ';padding:8px 12px;background:rgba(255,255,255,0.03);border-radius:0 8px 8px 0">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+        '<span style="font-size:1.2rem">' + cat.icon + '</span>' +
+        '<span style="font-weight:600;font-size:0.85rem;color:' + cat.color + '">' + escHtml(l1) + '</span>' +
+        '<span style="font-size:0.68rem;color:var(--text-muted);margin-left:auto">' + count + ' 条</span>' +
+      '</div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    cat.subs.forEach(function(l2) {
+      var subCount = tagState.lines.filter(function(l) { return l.tag_l1 === l1 && l.tag_l2 === l2; }).length;
+      html += '<span class="tag-cat-chip" style="background:' + cat.color + '22;border:1px solid ' + cat.color + '44;color:' + cat.color + ';padding:2px 8px;border-radius:12px;font-size:0.7rem;white-space:nowrap">' +
+        escHtml(l2) +
+        (subCount > 0 ? ' <span style="opacity:0.7">' + subCount + '</span>' : '') +
+        '</span>';
+    });
+    html += '</div></div>';
+  });
+  // 未分类统计
+  var untagged = tagState.lines.filter(function(l) { return !l.tag_l1; }).length;
+  if (untagged > 0 || tagState.lines.length > 0) {
+    html += '<div style="padding:6px 12px;color:var(--text-muted);font-size:0.73rem">📋 未分类：' + untagged + ' 条</div>';
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
-})();
+  panel.innerHTML = html;
+}
+
+// ── 初始化（SPA: 由 switchPage 调用，只执行一次） ──
+function tagInit() {
+  // 绑定拖拽上传
+  var dz = document.getElementById('tagDropZone');
+  var fi = document.getElementById('tagFileInput');
+  if (dz && fi) {
+    dz.addEventListener('dragover', function(e){e.preventDefault();dz.classList.add('drag-over');});
+    dz.addEventListener('dragleave', function(){dz.classList.remove('drag-over');});
+    dz.addEventListener('click', function(){fi.click();});
+    dz.addEventListener('drop', function(e){e.preventDefault();dz.classList.remove('drag-over');if(e.dataTransfer.files.length>0)tagProcessFiles(e.dataTransfer.files);});
+    fi.addEventListener('change', function(){if(fi.files.length>0)tagProcessFiles(fi.files);});
+  }
+  // API 配置已由顶部工具栏共享管理，无需单独加载
+  // 初始渲染
+  tagRenderColumns();
+}

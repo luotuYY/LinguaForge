@@ -1,13 +1,53 @@
 /**
- * TxtLlmHub — Event Handlers & Orchestration
- * Search handlers, translation workflows, export, copy/delete/edit,
- * grid resize, event listener setup, and initialization.
+ * TxtLlmHub — SPA Event Handlers & Orchestration
+ * [SPA改造] 新增 switchPage、统一 setProvider/checkLLM
  * Depends on: utils.js, state.js, api.js, render.js
  */
 
 // ── Constants ──
 var NL = '\n';
 var _exportGroups = null;
+
+// ── SPA 页面切换 ──
+var _currentPage = 'translate';
+var _tagInited = false;
+
+function switchPage(page) {
+  if (page === _currentPage) return;
+  _currentPage = page;
+
+  // 显示/隐藏页面容器
+  var pt = document.getElementById('page-translate');
+  var pp = document.getElementById('page-tag');
+  if (pt) pt.style.display = page === 'translate' ? '' : 'none';
+  if (pp) pp.style.display = page === 'tag' ? '' : 'none';
+
+  // 显示/隐藏工具栏右侧按钮
+  var tr = document.getElementById('translateToolbarRight');
+  var tg = document.getElementById('tagToolbarRight');
+  if (tr) tr.style.display = page === 'translate' ? '' : 'none';
+  if (tg) tg.style.display = page === 'tag' ? '' : 'none';
+
+  // 导航高亮
+  var navT = document.getElementById('navTranslate');
+  var navG = document.getElementById('navTag');
+  if (navT) navT.className = page === 'translate' ? 'nav-link active' : 'nav-link';
+  if (navG) navG.className = page === 'tag' ? 'nav-link active' : 'nav-link';
+
+  // 更新 hash（不触发 hashchange）
+  if (window.location.hash !== '#' + page) {
+    history.pushState(null, '', '#' + page);
+  }
+
+  // 分词页懒初始化
+  if (page === 'tag' && !_tagInited) {
+    _tagInited = true;
+    tagInit();
+  }
+
+  // 切换时刷新 LLM 状态
+  checkLLM();
+}
 
 // ── Search Handlers ──
 function onPreviewSearch() {
@@ -557,6 +597,7 @@ function triggerDownload(filename, fcontent) {
 (function () {
   var grid = document.querySelector('.main-grid');
   var hit = document.getElementById('resize-hit');
+  if (!grid || !hit) return;
   var MIN_RATIO = 0.18;
   var MAX_RATIO = 0.82;
   var colRatio = 0.5, rowRatio = 0.5;
@@ -621,19 +662,21 @@ function triggerDownload(filename, fcontent) {
   var dropZone = $('dropZone');
   var fileInput = $('fileInput');
 
-  dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
-  dropZone.addEventListener('dragleave', function () { dropZone.classList.remove('drag-over'); });
-  dropZone.addEventListener('click', function () { fileInput.click(); });
-  dropZone.addEventListener('drop', function (e) {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-    var files = e.dataTransfer.files;
-    if (files && files.length > 0) processFiles(files);
-  });
-  fileInput.addEventListener('change', function () {
-    var files = fileInput.files;
-    if (files && files.length > 0) processFiles(files);
-  });
+  if (dropZone && fileInput) {
+    dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', function () { dropZone.classList.remove('drag-over'); });
+    dropZone.addEventListener('click', function () { fileInput.click(); });
+    dropZone.addEventListener('drop', function (e) {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      var files = e.dataTransfer.files;
+      if (files && files.length > 0) processFiles(files);
+    });
+    fileInput.addEventListener('change', function () {
+      var files = fileInput.files;
+      if (files && files.length > 0) processFiles(files);
+    });
+  }
 
   // Deferred init (all modules loaded)
   setTimeout(function () { initPreviewRowLimit(); }, 0);

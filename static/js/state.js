@@ -242,26 +242,13 @@ function saveApiConfig() {
   localStorage.setItem('tllmh_api_config', JSON.stringify(cfg));
 }
 
-function toggleApiConfig() {
-  var panel = $('apiConfigPanel');
-  var arrow = $('apiConfigArrow');
-  if (panel.style.display === 'none') {
-    panel.style.display = 'block';
-    arrow.textContent = '▲';
-    loadApiConfig();
-  } else {
-    panel.style.display = 'none';
-    arrow.textContent = '▼';
-    saveApiConfig();
-  }
-}
+// toggleApiConfig 已移除：API 配置条改为始终展示（商业模式下），无需折叠
 
 async function testApiConnection() {
   saveApiConfig();
   var apiConfig = getApiConfig();
   if (!apiConfig.api_base) {
-    if (state.llmProvider === 'local') { apiConfig = {}; }
-    else { showToast('请先填写 API Base URL'); return; }
+    showToast('请先填写 API Base URL'); return;
   }
   try {
     var r = await fetch('/api/check-llm', {
@@ -276,15 +263,20 @@ async function testApiConnection() {
   } catch (e) { showToast('请求失败: ' + e.message); }
 }
 
-// ── Provider Switching ──
+// ── Provider Switching（SPA: 同时更新翻译页和分词页的按钮状态） ──
 function setProvider(provider) {
   if (state.llmProvider === provider) return;
   state.llmProvider = provider;
   localStorage.setItem('tllmh_provider', provider);
+  // 按钮高亮
   var btnL = $('btnLocal');
   var btnC = $('btnCommercial');
   if (btnL) btnL.className = provider === 'local' ? 'btn btn-sm segmented-btn active' : 'btn btn-sm segmented-btn';
   if (btnC) btnC.className = provider === 'commercial' ? 'btn btn-sm segmented-btn active' : 'btn btn-sm segmented-btn';
+  // API 配置条显隐
+  var bar = $('apiConfigBar');
+  if (bar) bar.style.display = provider === 'commercial' ? '' : 'none';
+  if (provider === 'commercial') loadApiConfig();
   checkLLM();
   showToast(provider === 'local' ? '已切换到本地LLM' : '已切换到商业API');
 }
@@ -302,12 +294,15 @@ function onThinkingChange() {
   var btnC = $('btnCommercial');
   if (btnL) btnL.className = saved === 'local' ? 'btn btn-sm segmented-btn active' : 'btn btn-sm segmented-btn';
   if (btnC) btnC.className = saved === 'commercial' ? 'btn btn-sm segmented-btn active' : 'btn btn-sm segmented-btn';
+  // 显示/隐藏 API 配置条
+  var bar = $('apiConfigBar');
+  if (bar) bar.style.display = saved === 'commercial' ? '' : 'none';
   if (saved === 'commercial') {
     try { loadApiConfig(); } catch (e) { console.error('loadApiConfig failed:', e); }
   }
 })();
 
-// ── LLM Connectivity Check ──
+// ── LLM Connectivity Check（SPA: 共享同一 llmStatus） ──
 async function checkLLM() {
   try {
     var providerLabel = state.llmProvider === 'local' ? '本地' : '商业';
@@ -324,9 +319,10 @@ async function checkLLM() {
       body: JSON.stringify(apiConfig)
     });
     var d = await r.json();
-    $('llmStatus').innerHTML = d.status === 'connected'
+    var statusHtml = d.status === 'connected'
       ? '<span class="dot dot-ok"></span><span class="status-text">' + providerLabel + ' LLM 已连接</span>'
       : '<span class="dot dot-err"></span><span class="status-text">' + providerLabel + ' LLM 未连接</span>';
+    $('llmStatus').innerHTML = statusHtml;
   } catch (e) {
     var providerLabel2 = state.llmProvider === 'local' ? '本地' : '商业';
     $('llmStatus').innerHTML = '<span class="dot dot-err"></span><span class="status-text">' + providerLabel2 + ' LLM 未连接</span>';
