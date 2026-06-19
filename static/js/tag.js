@@ -995,6 +995,9 @@ function tagOpenAdmin() {
       '<div class="modal-msg" style="font-weight:600;margin-bottom:8px">🏷️ 管理分类标签</div>' +
       '<div id="tagAdminBody" class="tag-admin-body"></div>' +
       '<div class="modal-actions">' +
+        '<button class="btn" onclick="tagAdminExport()" title="导出当前标签体系为 JSON 文件">📤 导出</button>' +
+        '<button class="btn" onclick="tagAdminImport()" title="从 JSON 文件导入标签体系">📥 导入</button>' +
+        '<span style="flex:1"></span>' +
         '<button class="btn btn-primary" id="tagAdminSave">保存并关闭</button>' +
         '<button class="btn" id="tagAdminCancel">取消</button>' +
       '</div></div>';
@@ -1104,6 +1107,56 @@ function tagAdminRemoveGroup(btn) {
     return;
   }
   btn.closest('.tag-admin-group').remove();
+}
+
+function tagAdminExport() {
+  var schema = getTagSchema();
+  var blob = new Blob([JSON.stringify(schema, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'tag_schema.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('已导出标签体系');
+}
+
+function tagAdminImport() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        if (typeof data !== 'object' || data === null || Object.keys(data).length === 0) {
+          showToast('无效的标签体系文件');
+          return;
+        }
+        // 验证结构：每个 key 必须有 subs 数组
+        for (var key in data) {
+          if (!data[key].subs || !Array.isArray(data[key].subs)) {
+            showToast('格式错误：' + key + ' 缺少 subs 数组');
+            return;
+          }
+        }
+        saveTagSchema(data);
+        // 刷新管理面板
+        tagOpenAdmin();
+        tagRenderColumns();
+        tagRenderPreview();
+        tagRenderCatPanel();
+        showToast('已导入标签体系（' + Object.keys(data).length + ' 个类目）');
+      } catch (ex) {
+        showToast('导入失败: ' + ex.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
 }
 
 // ── 初始化（由 switchPage 懒调用，只执行一次） ──

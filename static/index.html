@@ -163,8 +163,8 @@
         <input type="number" id="max_tokens" value="1024" min="1" max="4096" class="param-input" onchange="saveModeParams(state.translateMode)">
         <label title="重复惩罚：越高越避免重复用词，但过高可能导致用词不自然。&#10;取 1=不惩罚，1.05=轻微惩罚，1.2=明显惩罚&#10;双击恢复默认值 1.05" ondblclick="resetParamDefault(this.nextElementSibling)">Rep Penalty</label>
         <input type="number" id="repetition_penalty" value="1.05" min="1" max="2" step="0.05" class="param-input" onchange="saveModeParams(state.translateMode)">
-        <span class="prompt-toggle" id="promptToggle" onclick="togglePrompt()">System Prompt ▼</span><button class="btn btn-sm" onclick="resetSystemPrompt()" title="恢复当前模式的默认提示词" style="padding:2px 6px;font-size:0.85rem;margin-left:4px">↻</button>
-        <span class="prompt-toggle" id="hiddenRulesToggle" onclick="toggleHiddenRules()" style="margin-left:8px">翻译策略 ▼</span><button class="btn btn-sm" onclick="resetHiddenRules()" title="恢复默认翻译策略" style="padding:2px 6px;font-size:0.85rem;margin-left:4px">↻</button>
+        <span class="prompt-toggle" id="promptToggle" onclick="togglePrompt()" title="展开/折叠翻译提示词">翻译提示词 ▼</span><button class="btn btn-sm" onclick="resetSystemPrompt()" title="恢复当前模式的默认提示词" style="padding:2px 6px;font-size:0.85rem;margin-left:4px">↻</button>
+        <span class="prompt-toggle" id="polishStrategyToggle" onclick="togglePolishStrategy()" title="展开/折叠润色提示词（第二步：对比润色）" style="display:none;margin-left:8px">润色提示词 ▼</span><button class="btn btn-sm" onclick="resetPolishStrategy()" title="恢复默认润色提示词" style="padding:2px 6px;font-size:0.85rem;margin-left:4px;display:none" id="btnResetPolishStrategy">↻</button>
       </div>
       <div id="promptRow" style="display:none;flex-direction:column;gap:6px;margin-bottom:8px">
         <textarea class="prompt-area visible" id="system_prompt" placeholder="System prompt..." onchange="saveModeParams(state.translateMode)" style="width:100%;min-height:70px;resize:vertical;margin-bottom:0"></textarea>
@@ -178,15 +178,8 @@
           <button class="btn btn-sm" onclick="importPrompts()" title="导入提示词" style="flex-shrink:0;font-size:0.68rem">📥</button>
         </div>
       </div>
-      <div id="hiddenRulesRow" style="display:none;flex-direction:column;gap:4px;margin-bottom:8px">
-        <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;color:var(--text-secondary)">
-          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
-            <input type="checkbox" id="hiddenRulesEnabled" checked onchange="var ta=$('hiddenRulesText');if(ta)ta.disabled=!this.checked" style="accent-color:var(--accent)">
-            启用
-          </label>
-          <span style="color:var(--text-muted)">基础翻译策略（判断1-3）。润色模式的糅合对比规则由后端自动追加</span>
-        </div>
-        <textarea id="hiddenRulesText" class="prompt-area visible" placeholder="翻译策略..." style="width:100%;min-height:50px;resize:vertical;margin-bottom:0;font-size:0.72rem"></textarea>
+      <div id="polishStrategyRow" style="display:none;flex-direction:column;gap:6px;margin-bottom:8px">
+        <textarea class="prompt-area visible" id="polish_strategy" placeholder="润色策略（Step2：对比糅合提示词）..." onchange="savePolishStrategy()" style="width:100%;min-height:70px;resize:vertical;margin-bottom:0"></textarea>
       </div>
       <div class="progress-wrap">
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>

@@ -19,8 +19,6 @@ const state = {
   compareChecked: new Set(),
   files: [],                   // [{name, checked}] 来源文件管理
   previewRowLimit: 2000,       // 预览行数上限
-  hiddenRulesEnabled: true,    // 翻译策略开关
-  hiddenRulesText: '',         // 自定义翻译策略文本
   translateStarted: false,     // 是否过翻译任务（用于区分「翻译全部」和「继续翻译」）
 };
 // ── 索引重建（数组增删后调用） ──
@@ -57,13 +55,13 @@ var PRESET_PROMPTS = {
     {
       id: '__preset_ui_direct__',
       name: 'UI / Mod（术语）',
-      text: '你是一个专业游戏中文本地化专家，专精于UI、菜单、控件、Mod说明及软件界面翻译。\n请将给定原文翻译为中文，严格遵循以下规则：\n1. 术语第一：识别并保持游戏/软件专业术语、缩写、变量名（如{0}、%s）、快捷键（&键）的绝对准确与一致，必要时保留英文原词。\n2. 极度简洁：UI空间有限，译文必须比原文更短或等长，严禁添加解释性文字。\n3. 功能明确：按钮和选项翻译需能直接反映其点击后的操作，避免歧义。\n4. 格式保留：完整保留原文中的换行、空格、占位符和特殊符号。\n注意只需要输出翻译后的结果，不要额外解释。',
+      text: '你是一个专业游戏中文本地化专家，专精UI、菜单、控件、Mod说明翻译。\n规则：\n1. 术语绝对准确，必要时保留英文原词。\n2. 极度简洁，译文不超过原文长度。\n3. 完整保留占位符（{0}、%s）、快捷键（&键）、换行和特殊符号。\n只输出译文，不要额外解释。',
       locked: true
     },
     {
       id: '__preset_dialogue_direct__',
       name: '对话 / 剧情（生动）',
-      text: '你是一个顶尖的游戏本地化及配音脚本翻译专家。\n请将以下游戏对话/剧情文本翻译成中文。你的唯一信条：译文必须听起来像一个以中文为母语的角色，在那一刻会自然而然说出的话。\n遵循以下要求：\n1. 声入人心：根据上下文判断角色性格与情绪，中文对白必须贴合其身份、年龄和当下情感，保留俚语、口头禅和语气词。\n2. 彻底摆脱翻译腔：无视原文的英文句式结构，用地道中文口语彻底重写。被动变主动，名词变动词，长句化短句。\n3. 情境优先：为达到原文的戏剧效果或情感冲击力，可以牺牲字面翻译，进行创造性改写（意译）。\n4. 注意保持原文格式，只需要输出翻译后的结果，不要额外解释。',
+      text: '你是一个顶尖的游戏本地化及配音脚本翻译专家。\n要求：\n1. 根据上下文判断角色性格与情绪，中文对白必须贴合其身份和当下情感。\n2. 彻底摆脱翻译腔，用地道中文口语重写。\n3. 为达到戏剧效果或情感冲击力，可牺牲字面翻译进行创造性改写。\n只输出译文，不要额外解释。',
       locked: true
     }
   ],
@@ -71,26 +69,26 @@ var PRESET_PROMPTS = {
     {
       id: '__preset_ui_polish__',
       name: 'UI / Mod（术语）',
-      text: '你是一个专业中文本地化直译专家。\n请对给定原文进行极度忠实、结构对齐的直译。保留所有术语、占位符、快捷键标记不翻译。\n保留原文的换行和格式。即使读起来生硬，也务必保留原文语序和结构。\n注意只需要输出翻译后的结果，不要额外解释。',
-      step2: '你是一个专业游戏UI本地化校对专家。\n现在给你两个版本的译文：\n直译新译文：极度忠实原文结构和术语，但可能生硬。\n旧译文：线上正在使用的版本，可能更流畅但可能有术语错误或格式问题。\n请融合两者优点，输出最终UI译文，遵循铁律：\n1. 术语绝对准确：旧译文术语若与直译新译文冲突，以直译新译文的术语为准，修正旧译文错误。\n2. 极致简洁：删除所有冗余字词，确保译文长度不超过原文。\n3. 功能无歧义：按钮/选项的翻译必须清晰传达其功能。\n4. 修复格式：确保占位符、快捷键标记与直译新译文完全一致。\n5. 有限润色：在满足以上4条的前提下，可微调用词使其略为通顺，但绝不扩展或意译。\n只输出最终译文，不要额外解释。',
+      text: '你是一个专业游戏UI翻译初稿专家。请对以下文本逐句直译。\n规则：\n- 术语和占位符保留英文，不做翻译。\n- 结构对齐原文，即使生硬也保留原语序。\n- 不添加任何修饰或解释。\n只输出译文，不要额外解释。',
+      step2: '你是一个游戏UI本地化校对专家。\n你将收到【直译新译文】和【旧译文】。\n处理规则：\n- 术语以直译为准，旧译文有误则修正。\n- 极致精简，长度不超过原文。\n- 可微调使其通顺，但绝不意译。\n只输出最终译文。',
       locked: true
     },
     {
       id: '__preset_dialogue_polish__',
       name: '对话 / 剧情（生动）',
-      text: '你是一个专业游戏翻译初稿专家。\n请将以下游戏对话翻译成中文。目标是产出一个意思准确、基本通顺、但没有经过精细艺术加工的初稿。\n要求：\n- 准确传达原文的语义和情绪基调（喜怒哀乐）。\n- 保留所有关键信息、比喻和俚语意象（即使暂时读起来有点生硬）。\n- 可以保留部分原文结构，但需转换成通顺的中文。\n- 这是半成品，不需要完美，但必须为下一步的艺术润色提供无误的原材料。\n注意只需要输出翻译后的结果，不要额外解释。',
-      step2: '你是一个顶尖的游戏本地化润色及配音导演。\n现在给你两个版本的译文：\n直译新译文：意思准确、情绪基调正确，但缺乏艺术加工，可能略带翻译腔。\n旧译文：可能是来自旧版翻译的参考，有可取之处但也可能存在问题。\n你的任务是基于这两个版本，进行彻底的创造性重写，以产出最终中文对白。务必遵循：\n1. 唯一目标：最终译文必须听起来像原生中文游戏的精彩对白，完全消除翻译腔。\n2. 导演思维：想象角色正在说这句话。它的语气、节奏、用词是否100%贴合此情此景的角色？如果不，就改到贴合为止。\n3. 敢于重写：不被直译新译文的句子结构束缚。取其意，忘其形。继承旧译文中的神来之笔，但毫不犹豫地改写平淡或出戏的部分。\n4. 活化语言：善用中文四字格、俗语、语气词、短句，让对白"活"起来。\n5. 情感校准：确保最终译文的情绪冲击力，不低于、甚至要超越原文。\n只输出最终润色后的中文对白，不要额外解释。',
+      text: '你是一个专业游戏翻译初稿专家。请对以下文本逐句直译。\n要求：\n- 准确传达语义和情绪基调。\n- 保留关键信息和比喻意象。\n- 可微调语序使其通顺，但不做艺术加工。\n只输出译文，不要额外解释。',
+      step2: '你是一个顶尖的游戏本地化润色专家。\n你将收到【直译新译文】和【旧译文】。\n目标：写出地道的中文对白，完全摆脱翻译腔。\n- 继承直译的语义准确性，可彻底重写结构。\n- 吸收旧译文的口语化优点。\n- 善用中文四字格、俗语、语气词，让对白活起来。\n只输出最终译文。',
       locked: true
     }
   ]
 };
 
 // ── Default Prompts (HYBRID — system defaults for each mode) ──
-var DIRECT_DEFAULT = '你是一个全能的游戏本地化专家。你将收到混合了UI提示、系统通知和少量对话片段的文本。\n请逐句判断类型并应用不同策略翻译：\n- 若为UI/菜单/按钮/系统提示/Mod说明/术语：采用【UI模式】—— 绝对准确的术语，极度简洁，保留占位符和快捷键，长度不超过原文。\n- 若为对话/剧情/角色台词：采用【对白模式】—— 自然口语化，贴合角色情绪，完全消除翻译腔，必要时可意译。\n- 若一句话中混有术语和对话，优先保证术语准确，再用口语化方式串联。\n注意保留原文全部格式。只需要输出翻译后的结果，不要额外解释。';
+var DIRECT_DEFAULT = '你是一个游戏本地化翻译专家。请将以下文本翻译为中文。\n处理规则：\n- 含日文假名 → 直接翻译，严禁臆测或解读为代号。\n- 纯代码键名(del/get/set等) → 保持原文不变。\n- 装备名/UI标签/菜单项 → 简洁直译，不加修饰，长度不超过原文。\n- 对话/叙事/台词 → 自然流畅，贴合角色语气，允许意译。\n- 混合文本 → 术语优先，口语化串联。\n保留原文全部格式。只输出译文，不要额外解释。';
 
-var POLISH_DIRECT_DEFAULT = '你是一个专业游戏翻译初稿专家。请对以下混合文本进行逐句直译，作为底稿。\n同时，为每句自动打上类型标签（[UI] 或 [DIALOGUE]）。判断标准：\n- [UI]：按钮、菜单、系统提示、Mod说明、属性列表、包含占位符/快捷键的文本。\n- [DIALOGUE]：角色对白、剧情叙述、包含情绪和语气的文本。\n翻译要求：\n- [UI]句：进行结构对齐的忠实直译，术语和占位符保留英文。\n- [DIALOGUE]句：翻译为意思准确、带基础情绪的通顺中文，允许微调语序。\n输出格式：\n[标签] 中文底稿\n只输出带标签的译文，不要额外解释。';
+var POLISH_DIRECT_DEFAULT = '你是一个专业游戏翻译初稿专家。请对以下文本逐句直译，同时为每句打上类型标签。\n判断标准：\n- [UI]：按钮、菜单、系统提示、Mod说明、属性列表、含占位符/快捷键的文本。\n- [DIALOGUE]：角色对白、剧情叙述、含情绪和语气的文本。\n翻译要求：\n- [UI]句：结构对齐的忠实直译，术语和占位符保留英文。\n- [DIALOGUE]句：意思准确的通顺中文，允许微调语序。\n输出格式（必须严格带标签）：\n[标签] 中文底稿\n只输出带标签的译文，不要额外解释。';
 
-var POLISH_STEP2_DEFAULT = '你是一个资深游戏本地化校对专家。\n你将收到已打好标签的直译新译文和对应的旧译文。\n请针对[UI]和[DIALOGUE]标签，采用不同策略进行融合润色：\n\n【对[UI]文本 - 铁律模式】\n1. 术语与格式以直译新译文为唯一准绳，修正旧译文错误。\n2. 极度精简，删除任何冗余字，确保长度不超过原文。\n3. 在满足以上条件后，可微调用词使其略通顺，但绝不意译。\n\n【对[DIALOGUE]文本 - 重写模式】\n1. 以"听起来像地道的中文原生对白"为唯一目标。\n2. 无畏地抛弃直译新译文的生硬结构，只继承其准确语义和基础情绪。\n3. 吸收旧译文在口语化和角色贴合度上的优点。\n4. 进行创造性重写，活化语言，让对白"活"起来。\n\n输出时去掉所有标签，直接输出润色后的纯译文文本。保持原文顺序和格式。\n只输出最终译文，不要额外解释。';
+var POLISH_STEP2_DEFAULT = '你是一个资深游戏本地化校对专家。你将收到带标签的【直译新译文】和【旧译文】。请根据标签分别处理：\n\n【UI 模式】\n- 术语以直译新译文为准，旧译文有误则修正。\n- 极致精简，长度不超过原文。\n- 可微调使其通顺，但绝不意译。\n\n【DIALOGUE 模式】\n- 目标是写出地道的中文对白，完全摆脱翻译腔。\n- 继承直译的准确语义和情绪，但可彻底重写结构。\n- 吸收旧译文的口语化优点，进行创造性润色。\n\n输出时去掉所有标签，只输出最终的纯译文文本。';
 
 // ── Polish Step2 prompt storage ──
 function getPolishStep2Prompt() {
@@ -141,6 +139,31 @@ function loadModeParams(mode) {
     $('repetition_penalty').value = def.repetition_penalty;
     $('system_prompt').value = def.system_prompt;
   }
+  // 润色策略 Step2 textarea
+  var psRow = $('polishStrategyRow');
+  var psToggle = $('polishStrategyToggle');
+  var psResetBtn = $('btnResetPolishStrategy');
+  // 根据模式更新按钮文案
+  var promptToggle = $('promptToggle');
+  if (promptToggle) {
+    if (mode === 'polish') {
+      promptToggle.textContent = promptToggle.textContent.indexOf('▲') >= 0 ? '底稿提示词 ▲' : '底稿提示词 ▼';
+      promptToggle.title = '展开/折叠底稿提示词（润色第一步：直译底稿）';
+    } else {
+      promptToggle.textContent = promptToggle.textContent.indexOf('▲') >= 0 ? '翻译提示词 ▲' : '翻译提示词 ▼';
+      promptToggle.title = '展开/折叠翻译提示词';
+    }
+  }
+  if (mode === 'polish') {
+    var psTa = $('polish_strategy');
+    if (psTa) psTa.value = getPolishStep2Prompt();
+    if (psToggle) psToggle.style.display = '';
+    if (psResetBtn) psResetBtn.style.display = '';
+  } else {
+    if (psRow) psRow.style.display = 'none';
+    if (psToggle) { psToggle.style.display = 'none'; psToggle.textContent = '润色策略 ▼'; }
+    if (psResetBtn) psResetBtn.style.display = 'none';
+  }
 }
 
 function getLLMParams() {
@@ -151,40 +174,8 @@ function getLLMParams() {
     repetition_penalty: parseFloat($('repetition_penalty').value) || 1.05,
     system_prompt: $('system_prompt').value.trim() || undefined,
   };
-  // 润色模式附带 Step2 提示词
   if (state.translateMode === 'polish') {
     p.polish_prompt = getPolishStep2Prompt();
-  }
-  // 翻译策略：仅对默认混合提示词生效，预设自带策略时跳过
-  var currentPrompt = ($('system_prompt').value || '').trim();
-  var defaultPrompt = state.translateMode === 'polish' ? POLISH_DIRECT_DEFAULT : DIRECT_DEFAULT;
-  var isDefaultPrompt = (currentPrompt === defaultPrompt);
-  // 显示/隐藏翻译策略面板
-  var hrRow = $('hiddenRulesRow');
-  if (hrRow) hrRow.style.display = isDefaultPrompt ? 'none' : 'none'; // 始终隐藏，由 toggle 控制展开
-  var hrToggle = $('hiddenRulesToggle');
-  if (hrToggle) hrToggle.style.opacity = isDefaultPrompt ? '1' : '0.4';
-  if (hrToggle) hrToggle.title = isDefaultPrompt ? '展开/折叠翻译策略' : '翻译策略仅对默认提示词生效';
-  if (isDefaultPrompt) {
-    var hrEnabled = $('hiddenRulesEnabled');
-    var hrText = $('hiddenRulesText');
-    if (hrEnabled) {
-      state.hiddenRulesEnabled = hrEnabled.checked;
-      localStorage.setItem('tllmh_hidden_rules_enabled', String(hrEnabled.checked));
-    }
-    if (hrText) {
-      state.hiddenRulesText = hrText.value.trim();
-      localStorage.setItem('tllmh_hidden_rules_text', hrText.value);
-    }
-    if (state.hiddenRulesEnabled) {
-      p.hidden_rules = state.hiddenRulesText || undefined;
-    } else {
-      p.hidden_rules = '';
-    }
-  } else {
-    // 预设/自定义提示词：不传 hidden_rules，后端会用默认规则
-    // 但预设自带完整策略，默认规则反而干扰，所以传空
-    p.hidden_rules = '';
   }
   if (_modeReady) saveModeParams(state.translateMode);
   return p;
@@ -220,7 +211,13 @@ async function setMode(mode) {
   state.translateMode = mode;
   localStorage.setItem('tllmh_mode', mode);
   loadModeParams(mode);
-  _updateHiddenRulesUI();
+  var toggle = $('polishStrategyToggle');
+  if (toggle) {
+    toggle.style.display = mode === 'polish' ? '' : 'none';
+    toggle.textContent = '润色提示词 ▼';
+  }
+  var psRow = $('polishStrategyRow');
+  if (psRow && mode !== 'polish') psRow.style.display = 'none';
   if ($('promptRow').style.display === 'flex') renderSavedPrompts();
   var d = document.getElementById('btnModeDirect');
   var p = document.getElementById('btnModePolish');
@@ -333,61 +330,6 @@ function onThinkingChange() {
   if (cb && cb.checked) { showToast('已启用思考模式（速度较慢）'); }
 }
 
-// ── 翻译策略控制（隐性规则，仅对默认提示词生效） ──
-function toggleHiddenRules() {
-  var row = $('hiddenRulesRow');
-  var toggle = $('hiddenRulesToggle');
-  // 检查当前是否为默认提示词
-  var currentPrompt = ($('system_prompt') ? $('system_prompt').value : '').trim();
-  var defaultPrompt = state.translateMode === 'polish' ? POLISH_DIRECT_DEFAULT : DIRECT_DEFAULT;
-  if (currentPrompt !== defaultPrompt) {
-    showToast('翻译策略仅对默认提示词生效，预设自带策略');
-    return;
-  }
-  if (row.style.display === 'flex') {
-    row.style.display = 'none';
-    toggle.textContent = '翻译策略 ▼';
-  } else {
-    row.style.display = 'flex';
-    toggle.textContent = '翻译策略 ▲';
-  }
-}
-
-function _initHiddenRules() {
-  try {
-    var savedEnabled = localStorage.getItem('tllmh_hidden_rules_enabled');
-    if (savedEnabled !== null) {
-      state.hiddenRulesEnabled = savedEnabled === 'true';
-    }
-    var savedText = localStorage.getItem('tllmh_hidden_rules_text');
-    if (savedText !== null) {
-      state.hiddenRulesText = savedText.trim();
-    }
-  } catch (e) { /* ignore */ }
-  var cb = $('hiddenRulesEnabled');
-  if (cb) cb.checked = state.hiddenRulesEnabled;
-  var ta = $('hiddenRulesText');
-  if (ta) ta.value = state.hiddenRulesText;
-  _updateHiddenRulesUI();
-}
-
-function _updateHiddenRulesUI() {
-  var currentPrompt = ($('system_prompt') ? $('system_prompt').value : '').trim();
-  var defaultPrompt = state.translateMode === 'polish' ? POLISH_DIRECT_DEFAULT : DIRECT_DEFAULT;
-  var isDefault = (currentPrompt === defaultPrompt);
-  var toggle = $('hiddenRulesToggle');
-  if (toggle) {
-    toggle.style.opacity = isDefault ? '1' : '0.4';
-    toggle.title = isDefault ? '展开/折叠翻译策略' : '翻译策略仅对默认提示词生效，预设自带策略';
-  }
-  // 如果当前不是默认提示词，折叠面板
-  if (!isDefault) {
-    var row = $('hiddenRulesRow');
-    if (row) row.style.display = 'none';
-    if (toggle) toggle.textContent = '翻译策略 ▼';
-  }
-}
-
 // ── Provider 初始化 ──
 (function () {
   var saved = localStorage.getItem('tllmh_provider') || 'local';
@@ -454,18 +396,40 @@ async function loadDefaults() {
         system_prompt: d.polish_defaults.system_prompt,
       }));
     }
-    // 加载后端默认翻译策略（基础规则，润色糅合规则由后端自动追加）
-    if (d.hidden_rules_base && !localStorage.getItem('tllmh_hidden_rules_text')) {
-      state.hiddenRulesText = d.hidden_rules_base.trim();
-    }
     // 存储后端预设（供未来扩展）
     if (d.presets) {
-      window._backendPresets = d.presets;
+      // 后端预设已与前端 PRESET_PROMPTS 同步
     }
   } catch (e) { /* ignore */ }
-  _initHiddenRules();
   loadModeParams(state.translateMode);
   _modeReady = true;
+}
+
+// ── 润色策略控制（Step2 提示词，仅润色模式可见） ──
+function togglePolishStrategy() {
+  var row = $('polishStrategyRow');
+  var toggle = $('polishStrategyToggle');
+  if (row.style.display === 'flex') {
+    row.style.display = 'none';
+    toggle.textContent = '润色提示词 ▼';
+  } else {
+    row.style.display = 'flex';
+    toggle.textContent = '润色提示词 ▲';
+  }
+}
+
+function savePolishStrategy() {
+  var ta = $('polish_strategy');
+  if (ta) setPolishStep2Prompt(ta.value);
+}
+
+function resetPolishStrategy() {
+  var ta = $('polish_strategy');
+  if (ta) {
+    ta.value = POLISH_STEP2_DEFAULT;
+    setPolishStep2Prompt(POLISH_STEP2_DEFAULT);
+  }
+  showToast('已恢复默认润色提示词');
 }
 
 // ── 提示词模板管理 ──
@@ -509,9 +473,10 @@ function loadSavedPrompt(id) {
     $('system_prompt').value = preset.text;
     if (state.translateMode === 'polish' && preset.step2) {
       setPolishStep2Prompt(preset.step2);
+      var psTa = $('polish_strategy');
+      if (psTa) psTa.value = preset.step2;
     }
     showToast('已加载: ' + preset.name);
-    _updateHiddenRulesUI();
     return;
   }
   // 匹配用户自定义提示词
@@ -522,9 +487,10 @@ function loadSavedPrompt(id) {
     // 润色模式同时恢复配对的 Step2
     if (state.translateMode === 'polish' && p.step2) {
       setPolishStep2Prompt(p.step2);
+      var psTa2 = $('polish_strategy');
+      if (psTa2) psTa2.value = p.step2;
     }
     showToast('已加载: ' + p.name);
-    _updateHiddenRulesUI();
   }
 }
 
@@ -544,7 +510,9 @@ function renderSavedPrompts() {
 
   // 先渲染内置预设（锁定，无删除按钮）
   presets.forEach(function (p) {
-    savedHtml += '<span class="prompt-chip preset" onclick="loadSavedPrompt(\'' + p.id + '\')" data-tooltip="' + escHtml(p.text) + '">' +
+    var tipText = p.text;
+    if (p.step2) tipText += '\n\n—— 润色提示词 ——\n' + p.step2;
+    savedHtml += '<span class="prompt-chip preset" onclick="loadSavedPrompt(\'' + p.id + '\')" data-tooltip="' + escHtml(tipText) + '">' +
 '<span class="chip-text">' + escHtml(p.name) + '</span>' +
       '</span>';
   });
@@ -574,15 +542,17 @@ function renderSavedPrompts() {
 function togglePrompt() {
   var row = $('promptRow');
   var toggle = $('promptToggle');
+  var isPolish = state.translateMode === 'polish';
+  var label = isPolish ? '底稿提示词' : '翻译提示词';
   if (row.style.display === 'flex') {
     row.style.display = 'none';
-    toggle.textContent = 'System Prompt ▼';
+    toggle.textContent = label + ' ▼';
   } else {
     row.style.display = 'flex';
     showPromptBar();
     var prompts = JSON.parse((localStorage.getItem(promptKey()) || '[]'));
     $('promptTitle').placeholder = '提示词' + (prompts.length + 1);
-    toggle.textContent = 'System Prompt ▲';
+    toggle.textContent = label + ' ▲';
   }
 }
 
@@ -593,48 +563,46 @@ function resetSystemPrompt() {
   // 润色模式同时重置 Step2 为默认值
   if (mode === 'polish') {
     setPolishStep2Prompt(POLISH_STEP2_DEFAULT);
+    var psTa = $('polish_strategy');
+    if (psTa) psTa.value = POLISH_STEP2_DEFAULT;
   }
   saveModeParams(mode);
-  _updateHiddenRulesUI();
   showToast('已恢复默认提示词');
 }
 
-function resetHiddenRules() {
-  try {
-    fetch('/api/config').then(function(resp) { return resp.json(); }).then(function(d) {
-      var rules = (d.hidden_rules_base || d.hidden_rules || '').trim();
-      if (rules) {
-        state.hiddenRulesText = rules;
-        $('hiddenRulesText').value = rules;
-        localStorage.setItem('tllmh_hidden_rules_text', rules);
-        showToast('已恢复默认翻译策略');
-      }
-    });
-  } catch (e) { /* ignore */ }
-}
 
 // ── 提示词导入/导出（JSON 格式） ──
 function exportPrompts() {
+  var directPrompts = [];
+  var polishPrompts = [];
+  try { directPrompts = JSON.parse(localStorage.getItem('tllmh_prompts_direct') || '[]'); } catch (e) {}
+  try { polishPrompts = JSON.parse(localStorage.getItem('tllmh_prompts_polish') || '[]'); } catch (e) {}
+
+  // 为每条润色提示词补全 step2（优先条目自带，回退全局默认）
+  var globalStep2 = getPolishStep2Prompt();
+  polishPrompts.forEach(function(p) {
+    if (!p.step2) p.step2 = globalStep2;
+  });
+
   var data = {
-    version: 1,
-    direct: [],
-    polish: [],
-    hidden_rules_enabled: state.hiddenRulesEnabled,
-    hidden_rules_text: state.hiddenRulesText,
-    polish_step2: getPolishStep2Prompt(),
+    version: 2,
+    exported_at: new Date().toISOString(),
+    source: 'TxtLlmHub',
+    direct: directPrompts,
+    polish: polishPrompts,
   };
-  try {
-    data.direct = JSON.parse(localStorage.getItem('tllmh_prompts_direct') || '[]');
-    data.polish = JSON.parse(localStorage.getItem('tllmh_prompts_polish') || '[]');
-  } catch (e) { /* ignore */ }
+
+  var total = directPrompts.length + polishPrompts.length;
+  if (total === 0) { showToast('没有自定义提示词可导出'); return; }
+
   var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a');
   a.href = url;
-  a.download = 'TxtLlmHub_prompts.json';
+  a.download = 'TxtLlmHub_prompts_' + new Date().toISOString().slice(0, 10) + '.json';
   a.click();
   URL.revokeObjectURL(url);
-  showToast('已导出提示词配置');
+  showToast('已导出 ' + total + ' 条提示词（直译' + directPrompts.length + ' / 润色' + polishPrompts.length + '）');
 }
 
 function importPrompts() {
@@ -649,29 +617,97 @@ function importPrompts() {
       try {
         var data = JSON.parse(ev.target.result);
         if (!data.version) { showToast('无效的提示词配置文件'); return; }
-        if (data.direct && data.direct.length > 0) {
-          localStorage.setItem('tllmh_prompts_direct', JSON.stringify(data.direct));
+        var impDirect = data.direct || [];
+        var impPolish = data.polish || [];
+        if (impDirect.length === 0 && impPolish.length === 0) {
+          showToast('文件中没有提示词数据'); return;
         }
-        if (data.polish && data.polish.length > 0) {
-          localStorage.setItem('tllmh_prompts_polish', JSON.stringify(data.polish));
+
+        // 读取现有提示词
+        var existDirect = [];
+        var existPolish = [];
+        try { existDirect = JSON.parse(localStorage.getItem('tllmh_prompts_direct') || '[]'); } catch (e) {}
+        try { existPolish = JSON.parse(localStorage.getItem('tllmh_prompts_polish') || '[]'); } catch (e) {}
+
+        // 计算新增/更新数
+        var existDirectIds = {};
+        var existPolishIds = {};
+        existDirect.forEach(function(p) { existDirectIds[p.id] = true; });
+        existPolish.forEach(function(p) { existPolishIds[p.id] = true; });
+        var newD = impDirect.filter(function(p) { return !existDirectIds[p.id]; }).length;
+        var newP = impPolish.filter(function(p) { return !existPolishIds[p.id]; }).length;
+        var updD = impDirect.length - newD;
+        var updP = impPolish.length - newP;
+
+        // 构建预览 HTML
+        var previewHtml = '<div style="margin-bottom:12px;font-size:0.82rem;color:var(--text-secondary)">';
+        previewHtml += '来源：' + escHtml(data.source || '未知') + (data.exported_at ? ' · ' + data.exported_at.slice(0, 10) : '') + '</div>';
+        if (impDirect.length > 0) {
+          previewHtml += '<div style="margin-bottom:8px"><b style="color:var(--accent)">直译提示词</b> (' + impDirect.length + ' 条)</div>';
+          previewHtml += '<div style="margin-bottom:10px;padding-left:8px">';
+          impDirect.forEach(function(p) {
+            var badge = existDirectIds[p.id] ? ' <span style="color:var(--amber);font-size:0.68rem">更新</span>' : ' <span style="color:var(--green);font-size:0.68rem">新增</span>';
+            previewHtml += '<div style="font-size:0.78rem;padding:2px 0">· ' + escHtml(p.name || '未命名') + badge + '</div>';
+          });
+          previewHtml += '</div>';
         }
-        if (typeof data.hidden_rules_enabled === 'boolean') {
-          state.hiddenRulesEnabled = data.hiddenRulesEnabled;
-          localStorage.setItem('tllmh_hidden_rules_enabled', String(data.hidden_rules_enabled));
-          var cb = $('hiddenRulesEnabled');
-          if (cb) cb.checked = data.hidden_rules_enabled;
+        if (impPolish.length > 0) {
+          previewHtml += '<div style="margin-bottom:8px"><b style="color:var(--accent)">润色提示词</b> (' + impPolish.length + ' 条)</div>';
+          previewHtml += '<div style="margin-bottom:10px;padding-left:8px">';
+          impPolish.forEach(function(p) {
+            var badge = existPolishIds[p.id] ? ' <span style="color:var(--amber);font-size:0.68rem">更新</span>' : ' <span style="color:var(--green);font-size:0.68rem">新增</span>';
+            previewHtml += '<div style="font-size:0.78rem;padding:2px 0">· ' + escHtml(p.name || '未命名') + badge + '</div>';
+          });
+          previewHtml += '</div>';
         }
-        if (data.hidden_rules_text) {
-          state.hiddenRulesText = data.hidden_rules_text;
-          localStorage.setItem('tllmh_hidden_rules_text', data.hidden_rules_text);
-          var ta = $('hiddenRulesText');
-          if (ta) ta.value = data.hidden_rules_text;
+        if (newD + newP > 0) {
+          previewHtml += '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px">同名同ID的提示词将被覆盖，其余保留。</div>';
         }
-        if (data.polish_step2) {
-          setPolishStep2Prompt(data.polish_step2);
+
+        // 显示预览弹窗
+        var modal = document.getElementById('importPreviewModal');
+        if (!modal) {
+          modal = document.createElement('div');
+          modal.id = 'importPreviewModal';
+          modal.className = 'modal-overlay';
+          modal.style.display = 'none';
+          modal.innerHTML = '<div class="modal-box" style="max-width:480px"><div class="modal-msg" style="font-weight:600">📥 导入提示词</div>' +
+            '<div id="importPreviewBody"></div>' +
+            '<div class="modal-actions"><button class="btn btn-primary" id="importPreviewOk">确认导入</button><button class="btn" id="importPreviewCancel">取消</button></div></div>';
+          document.body.appendChild(modal);
+          modal.addEventListener('click', function(ev) { if (ev.target === modal) modal.style.display = 'none'; });
+          document.addEventListener('keydown', function(ev) { if (ev.key === 'Escape') modal.style.display = 'none'; });
         }
-        renderSavedPrompts();
-        showToast('已导入提示词配置（' + ((data.direct||[]).length + (data.polish||[]).length) + ' 条）');
+        document.getElementById('importPreviewBody').innerHTML = previewHtml;
+        modal.style.display = 'flex';
+        document.getElementById('importPreviewCancel').onclick = function() { modal.style.display = 'none'; };
+        document.getElementById('importPreviewOk').onclick = function() {
+          modal.style.display = 'none';
+          // 执行合并导入
+          var directMap = {};
+          existDirect.forEach(function(p) { directMap[p.id] = p; });
+          impDirect.forEach(function(p) { directMap[p.id] = p; });
+          var mergedDirect = Object.values(directMap);
+
+          var polishMap = {};
+          existPolish.forEach(function(p) { polishMap[p.id] = p; });
+          impPolish.forEach(function(p) { polishMap[p.id] = p; });
+          var mergedPolish = Object.values(polishMap);
+
+          localStorage.setItem('tllmh_prompts_direct', JSON.stringify(mergedDirect));
+          localStorage.setItem('tllmh_prompts_polish', JSON.stringify(mergedPolish));
+
+          if (data.polish_step2) {
+            setPolishStep2Prompt(data.polish_step2);
+            var psTa = $('polish_strategy');
+            if (psTa) psTa.value = data.polish_step2;
+          }
+
+          renderSavedPrompts();
+          var msg = '导入完成：新增 ' + (newD + newP) + ' 条';
+          if (updD + updP > 0) msg += '，更新 ' + (updD + updP) + ' 条';
+          showToast(msg);
+        };
       } catch (ex) {
         showToast('导入失败: ' + ex.message);
       }
