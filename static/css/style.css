@@ -93,6 +93,10 @@ body {
   color: #fff;
   background: rgba(124,140,248,0.1);
 }
+.prompt-chip:active {
+  background: rgba(124,140,248,0.2);
+  transform: scale(0.97);
+}
 .prompt-chip .chip-del {
   flex-shrink: 0;
   margin-left: 2px;
@@ -192,8 +196,10 @@ body {
   border-color: rgba(255,255,255,0.18);
   transform: translateY(-1px);
 }
-.btn:active { transform: translateY(0); }
+.btn:active { transform: translateY(1px); background: rgba(255,255,255,0.15); }
 .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.btn:disabled:active { transform: none; background: rgba(255,255,255,0.05); }
+.btn-primary:active { background: var(--accent); box-shadow: 0 0 12px rgba(124,140,248,0.3); }
 .btn-primary {
   background: var(--accent);
   color: #fff;
@@ -227,6 +233,7 @@ body {
   background: rgba(255,255,255,0.06);
 }
 .nav-link:hover { color: var(--text); background: rgba(255,255,255,0.12); }
+.nav-link:active { background: rgba(255,255,255,0.18); transform: scale(0.98); }
 
 /* ===== 主网格 ===== */
 .main-grid {
@@ -325,6 +332,11 @@ body {
   border-color: var(--accent);
   background: rgba(124,140,248,0.06);
 }
+.drop-zone:active {
+  border-color: var(--accent-hover);
+  background: rgba(124,140,248,0.1);
+  transform: scale(0.99);
+}
 .drop-zone input[type=file] { display: none; }
 .drop-zone .dz-icon { font-size: 2rem; margin-bottom: 6px; }
 .drop-zone .dz-text { font-size: 0.85rem; color: var(--text-secondary); }
@@ -377,6 +389,7 @@ body {
   transition: color 0.15s;
 }
 .search-clear:hover { color: #fff; }
+.search-clear:active { color: var(--accent); transform: scale(0.9); }
 .search-wrap.active .search-clear { display: inline; }
 .search-count { font-size: 0.7rem; color: var(--text-secondary); white-space: nowrap; }
 
@@ -485,6 +498,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 .segmented-btn.active { background: var(--accent); color: #fff; }
 .segmented-btn:not(.active) { background: transparent; color: var(--text-muted); }
 .segmented-btn:not(.active):hover { background: rgba(255,255,255,0.05); color: var(--text); }
+.segmented-btn:active { background: rgba(255,255,255,0.1); }
 .param-row {
   display: flex;
   align-items: center;
@@ -513,9 +527,12 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  transition: color 0.15s;
+  transition: color 0.15s, opacity 0.15s;
+  padding: 2px 4px;
+  border-radius: 3px;
 }
-.prompt-toggle:hover { color: var(--accent-hover); }
+.prompt-toggle:hover { color: var(--accent-hover); background: rgba(124,140,248,0.08); }
+.prompt-toggle:active { color: var(--accent-hover); background: rgba(124,140,248,0.15); }
 .prompt-area {
   display: none;
 
@@ -805,6 +822,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   transition: opacity 0.15s, color 0.15s;
 }
 .file-delete:hover { opacity: 1; color: var(--red, #f44); }
+.file-delete:active { transform: scale(0.9); }
 .file-drag-handle:active { cursor: grabbing; }
 .file-check { cursor: pointer; margin: 0; }
 .file-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1059,6 +1077,63 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 #page-tag .tag-card-actions { position: absolute; top: 4px; right: 4px; opacity: 0; transition: opacity 0.15s; z-index: 2; }
 #page-tag .tag-card:hover .tag-card-actions { opacity: 1; }
 
+/* 卡片复选框 */
+#page-tag .tag-card-check {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  background-color: rgba(0, 0, 0, 0.4);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+  cursor: pointer;
+  margin: 0 4px 0 0;
+  vertical-align: middle;
+  position: relative;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  opacity: 0;
+}
+#page-tag .tag-card:hover .tag-card-check { opacity: 0.6; }
+#page-tag .tag-card-check:checked { opacity: 1; background-color: var(--accent); border-color: var(--accent); }
+#page-tag .tag-card-check:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px; top: 0;
+  width: 5px; height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+/* 列头全选 */
+#page-tag .tag-column-select-all {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 13px; height: 13px;
+  background-color: rgba(0, 0, 0, 0.3);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  cursor: pointer;
+  margin: 0 4px 0 0;
+  vertical-align: middle;
+  position: relative;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+#page-tag .tag-column-select-all:checked {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+#page-tag .tag-column-select-all:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px; top: 0;
+  width: 4px; height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
 /* 标签徽章 */
 #page-tag .tag-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.65rem; color: #fff; margin-left: 6px; vertical-align: middle; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
 
@@ -1066,6 +1141,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 #page-tag .tag-edit-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: rgba(30, 34, 50, 0.95); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; max-height: 200px; overflow-y: auto; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
 #page-tag .tag-edit-option { padding: 6px 10px; font-size: 0.78rem; cursor: pointer; transition: background 0.15s; }
 #page-tag .tag-edit-option:hover { background: rgba(79,195,247,0.15); }
+#page-tag .tag-edit-option:active { background: rgba(79,195,247,0.25); }
 #tagEditSelect {
   background: rgba(255,255,255,0.07);
   color: var(--text);
@@ -1275,4 +1351,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 }
 .tag-admin-sub-del:hover {
   color: var(--red);
+}
+.tag-admin-sub-del:active {
+  transform: scale(0.85);
 }

@@ -1,11 +1,10 @@
 /**
- * TxtLlmHub — API & Data Layer
- * Backend communication: file upload, manual input parsing,
- * single/batch translation, and translating-state helpers.
- * Depends on: utils.js, state.js
+ * TxtLlmHub — API 层
+ * 文件上传解析、手动输入、LLM 翻译调用、批量流式翻译、文件管理
+ * Depends on: utils.js, state.js, render.js
  */
 
-// ── File Upload ──
+// ── 文件上传 ──
 async function processFiles(files) {
   var txtFiles = Array.from(files).filter(function (f) { return f.name.endsWith('.txt'); });
   if (txtFiles.length === 0) { showToast('请选择 .txt 文件'); return; }
@@ -93,7 +92,7 @@ async function processFiles(files) {
   }
 }
 
-// ── Manual Input ──
+// ── 手动输入 ──
 async function loadManualInput() {
   var raw = $('manualInput').value.trim();
   if (!raw) { showToast('输入内容为空'); return; }
@@ -162,7 +161,7 @@ async function loadManualInput() {
   }
 }
 
-// ── Single-line Translation Core ──
+// ── 单条翻译 ──
 async function translateOneCore(index) {
   var line = state.lines[index];
   if (!line) return;
@@ -184,7 +183,8 @@ async function translateOneCore(index) {
       line.error = '';
       line.truncated = !!d.truncated;
       line.warning = d.warning || '';
-      var extra = line.truncated ? ' ⚠️截断' : (line.warning ? ' ⚠️' : '');
+      line.degraded = !!d.degraded;
+      var extra = line.truncated ? ' ⚠️截断' : (line.warning ? ' ⚠️' : (line.degraded ? ' ↓降级' : ''));
       log('[' + (line.index + 1) + '] → ' + d.translation.substring(0, 40) + extra, 'ok');
     } else {
       line.error = d.error || '未知错误';
@@ -196,7 +196,7 @@ async function translateOneCore(index) {
   }
 }
 
-// ── Translation State Helpers ──
+// ── 翻译状态控制 ──
 // ── Task Runtime Timer ──
 var _taskStartTime = 0;
 var _runtimeTimer = 0;
@@ -245,7 +245,7 @@ function exitTranslatingState() {
   renderCompare();
 }
 
-// ── Batch Translation Engine ──
+// ── 批量流式翻译（一次请求，NDJSON 逐条返回） ──
 
 async function translateBatchItems(items) {
   var total = items.length;
@@ -257,104 +257,94 @@ async function translateBatchItems(items) {
 
   setBatchUpdating(true);
   var done = 0, errors = 0;
-  for (var start = 0; start < total; start += concurrency) {
-    if (state.abort) {
-      $('progressText').textContent = '已停止 · ' + done + '/' + total;
-      log('翻译已停止，已完成 ' + done + ' 行');
-      break;
-    }
-    var chunk = items.slice(start, start + concurrency);
-    var chunkEnd = Math.min(start + concurrency, total);
-    $('progressText').textContent = '进度: ' + done + '/' + total + ' · 并发' + concurrency;
-    log('块' + (Math.floor(start / concurrency) + 1) + ': 第' + (start + 1) + '-' + chunkEnd + '行...');
-    try {
-      var batchBody = Object.assign({ items: chunk, concurrency: concurrency }, params, apiConfig);
-      var r = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(batchBody)
-      });
-      if (!r.ok) {
-        var errText = '';
-        try { var ed = await r.json(); errText = ed.error || ''; } catch (ex) { errText = r.statusText; }
-        for (var ci = 0; ci < chunk.length; ci++) {
-          chunk[ci].error = errText || '翻译失败';
-          chunk[ci].new_translation = '';
-        }
-        errors += chunk.length;
-        log('块' + (Math.floor(start / concurrency) + 1) + ': 失败 - ' + (errText || '请求错误'), 'err');
-      } else {
-        // 流式读取 NDJSON
-        var reader = r.body.getReader();
-        var decoder = new TextDecoder();
-        var buf = '';
-        var okIn = 0, errIn = 0;
-        while (true) {
-          var streamResult = await reader.read();
-          if (streamResult.done) break;
-          buf += decoder.decode(streamResult.value, { stream: true });
-          var lines = buf.split('\n');
-          buf = lines.pop();
-          for (var li = 0; li < lines.length; li++) {
-            var line = lines[li].trim();
-            if (!line) continue;
-            try {
-              var res = JSON.parse(line);
-              var pos = res.index;
-              if (pos >= 0 && pos < chunk.length) {
-                chunk[pos].new_translation = res.new_translation;
-                chunk[pos].error = res.error || '';
-                chunk[pos].truncated = !!res.truncated;
-                chunk[pos].warning = res.warning || '';
-                if (res.error) errIn++; else okIn++;
-                // 增量更新该行（避免全量重建 DOM）
-                updateCompareRow(chunk[pos].index);
-              }
-            } catch (parseErr) {
-              // skip malformed lines
-            }
-          }
-        }
-        // 处理 buffer 中残留的最后一行
-        if (buf.trim()) {
-          try {
-            var lastRes = JSON.parse(buf.trim());
-            var lastPos = lastRes.index;
-            if (lastPos >= 0 && lastPos < chunk.length) {
-              chunk[lastPos].new_translation = lastRes.new_translation;
-              chunk[lastPos].error = lastRes.error || '';
-              chunk[lastPos].truncated = !!lastRes.truncated;
-              chunk[lastPos].warning = lastRes.warning || '';
-              if (lastRes.error) errIn++; else okIn++;
-              updateCompareRow(chunk[lastPos].index);
-            }
-          } catch (parseErr2) {}
-        }
-        log('块' + (Math.floor(start / concurrency) + 1) + ': 完成' + okIn + '行' + (errIn ? ',失败' + errIn + '行' : ''), 'ok');
-        // 增量更新已在流式读取中逐条完成，此处无需 renderCompare
+  $('progressText').textContent = '进度: 0/' + total + ' · 并发' + concurrency;
+  log('开始翻译，共 ' + total + ' 行，并发 ' + concurrency);
+
+  try {
+    var batchBody = Object.assign({ items: items, concurrency: concurrency }, params, apiConfig);
+    var r = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(batchBody)
+    });
+    if (!r.ok) {
+      var errText = '';
+      try { var ed = await r.json(); errText = ed.error || ''; } catch (ex) { errText = r.statusText; }
+      for (var ci = 0; ci < items.length; ci++) {
+        items[ci].error = errText || '翻译失败';
+        items[ci].new_translation = '';
       }
-    } catch (e) {
-      for (var ci2 = 0; ci2 < chunk.length; ci2++) { chunk[ci2].error = e.message; }
-      errors += chunk.length;
-      log('块' + (Math.floor(start / concurrency) + 1) + ': 异常 - ' + e.message, 'err');
-      renderCompare();
+      errors = items.length;
+      log('请求失败: ' + (errText || '请求错误'), 'err');
+    } else {
+      // 流式读取 NDJSON（后端逐条返回，前端逐条渲染）
+      var reader = r.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+      while (true) {
+        if (state.abort) {
+          reader.cancel();
+          break;
+        }
+        var streamResult = await reader.read();
+        if (streamResult.done) break;
+        buf += decoder.decode(streamResult.value, { stream: true });
+        var lines = buf.split('\n');
+        buf = lines.pop();
+        for (var li = 0; li < lines.length; li++) {
+          var line = lines[li].trim();
+          if (!line) continue;
+          try {
+            var res = JSON.parse(line);
+            var pos = res.index;
+            if (pos >= 0 && pos < items.length) {
+              items[pos].new_translation = res.new_translation;
+              items[pos].error = res.error || '';
+              items[pos].truncated = !!res.truncated;
+              items[pos].warning = res.warning || '';
+              items[pos].degraded = !!res.degraded;
+              if (res.error) errors++;
+              done++;
+              updateCompareRow(items[pos].index);
+            }
+          } catch (parseErr) {}
+        }
+        $('progressFill').style.width = (done / total * 100) + '%';
+        var successCount = done - errors;
+        $('progressText').textContent = '进度: ' + done + '/' + total + ' (成功' + successCount + ', 失败' + errors + ')';
+      }
+      // 处理 buffer 中残留的最后一行
+      if (buf.trim()) {
+        try {
+          var lastRes = JSON.parse(buf.trim());
+          var lastPos = lastRes.index;
+          if (lastPos >= 0 && lastPos < items.length) {
+            items[lastPos].new_translation = lastRes.new_translation;
+            items[lastPos].error = lastRes.error || '';
+            items[lastPos].truncated = !!lastRes.truncated;
+            items[lastPos].warning = lastRes.warning || '';
+            items[lastPos].degraded = !!lastRes.degraded;
+            if (lastRes.error) errors++;
+            done++;
+            updateCompareRow(items[lastPos].index);
+          }
+        } catch (e2) {}
+      }
     }
-    done = chunkEnd;
-    $('progressFill').style.width = (done / total * 100) + '%';
-    var successCount = done - errors;
-    $('progressText').textContent = '进度: ' + done + '/' + total + ' (成功' + successCount + ', 失败' + errors + ')';
-    renderPreview();
-    // renderCompare 已在每块完成后刷新
-    if (state.abort) break;
+  } catch (e) {
+    for (var ci2 = 0; ci2 < items.length; ci2++) { if (!items[ci2].new_translation && !items[ci2].error) items[ci2].error = e.message; }
+    errors += (items.length - done);
+    log('异常: ' + e.message, 'err');
   }
+
   setBatchUpdating(false);
-  // 最终全量同步一次（确保搜索/排序等状态一致）
+  renderPreview();
   renderCompare();
   return { done: done, errors: errors, wasAborted: state.abort };
 }
 
 
-// ── File List Management ──
+// ── 文件列表管理 ──
 function renderFileList() {
   var html = '';
   for (var i = 0; i < state.files.length; i++) {
@@ -375,7 +365,7 @@ function deleteFile(index) {
   var f = state.files[index];
   if (!f) return;
   var fname = f.name;
-  // Remove lines belonging to this file
+  // 删除属于该文件的行
   var indices = [];
   for (var i = state.lines.length - 1; i >= 0; i--) {
     if (state.lines[i]._file === fname) indices.push(i);
@@ -385,19 +375,19 @@ function deleteFile(index) {
     state.compareChecked.delete(indices[di]);
     state.lines.splice(indices[di], 1);
   }
-  // Re-index and rebuild checked sets
+  // 重建索引和复选框状态
   rebuildIndicesAndCheckboxes();
-  // Remove file entry
+  // 删除文件条目
   state.files.splice(index, 1);
   state.fileNames = state.files.map(function (x) { return x.name; });
-  // Clear search queries
+  // 清空搜索
   state.previewQuery = '';
   state.compareQuery = '';
   $('previewSearch').value = '';
   $('compareSearch').value = '';
   updateSearchUI('previewSearchWrap', 'previewSearchCount', '');
   updateSearchUI('compareSearchWrap', 'compareSearchCount', '');
-  // If no files left, clear everything
+  // 文件全部删除后清空所有
   if (state.files.length === 0) {
     state.lines = [];
     state.fileNames = [];
@@ -412,7 +402,7 @@ function deleteFile(index) {
     $('btnClearAll').disabled = true;
     $('translateHint').style.display = 'block';
   }
-  // Clear manual input textarea if deleting manual entry
+  // 删除手动录入时清空输入框
   if (fname === '手动录入') {
     $('manualInput').value = '';
   }
@@ -462,7 +452,7 @@ function onFileDrop(e) {
   var dstIndex = parseInt(entry.dataset.fileIndex);
   if (_dragSrcIndex < 0 || _dragSrcIndex === dstIndex) return;
 
-  // Snapshot checked lines by object reference (not index, which will change)
+  // 按对象引用快照选中行（索引会变，不能用索引）
   var checkedPCLines = new Set();
   var checkedCCLines = new Set();
   state.lines.forEach(function (l) {
@@ -470,11 +460,11 @@ function onFileDrop(e) {
     if (state.compareChecked.has(l.index)) checkedCCLines.add(l);
   });
 
-  // Reorder state.files
+  // 重排文件列表
   var item = state.files.splice(_dragSrcIndex, 1)[0];
   state.files.splice(dstIndex, 0, item);
 
-  // Reorder state.lines to match new file order
+  // 按新文件顺序重排 state.lines
   var newLines = [];
   for (var fi = 0; fi < state.files.length; fi++) {
     var fname = state.files[fi].name;
@@ -482,16 +472,16 @@ function onFileDrop(e) {
       if (state.lines[li]._file === fname) newLines.push(state.lines[li]);
     }
   }
-  // Add lines without _file at the end
+  // 无文件归属的行追加到末尾
   for (var li2 = 0; li2 < state.lines.length; li2++) {
     if (!state.lines[li2]._file) newLines.push(state.lines[li2]);
   }
   state.lines = newLines;
 
-  // Re-index
+  // 重建索引
   for (var ri = 0; ri < state.lines.length; ri++) { state.lines[ri].index = ri; }
 
-  // Rebuild checked sets from snapshots (uses object identity, survives reorder)
+  // 从快照恢复选中状态（按对象引用，重排后不变）
   state.previewChecked.clear();
   state.compareChecked.clear();
   state.lines.forEach(function (l) {
@@ -545,9 +535,9 @@ function deleteCheckedPreview() {
     state.previewChecked.delete(indices[i]);
     state.compareChecked.delete(indices[i]);
   }
-  // Re-index and rebuild checked sets
+  // 重建索引和复选框状态
   rebuildIndicesAndCheckboxes();
-  // Remove empty file entries
+  // 删除空文件条目
   state.files = state.files.filter(function (f) {
     return state.lines.some(function (l) { return l._file === f.name; });
   });
@@ -573,7 +563,7 @@ function deletePreviewLine(index, e) {
   state.previewChecked.delete(index);
   state.compareChecked.delete(index);
   rebuildIndicesAndCheckboxes();
-  // Remove file entry if no lines remain
+  // 删除文件条目 if no lines remain
   if (line._file && !state.lines.some(function (l) { return l._file === line._file; })) {
     state.files = state.files.filter(function (f) { return f.name !== line._file; });
     state.fileNames = state.files.map(function (f) { return f.name; });

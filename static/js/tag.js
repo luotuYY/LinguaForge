@@ -1,11 +1,10 @@
 /**
- * TxtLlmHub — 分词/标签模块（SPA 版本）
- * [SPA改造] 移除重复的 setProvider/checkLLM（共用 state.js 中的全局版本）
- * [SPA改造] 将自动初始化封装为 tagInit()，由 switchPage 懒调用
- * 只依赖 utils.js 的 $, escHtml, showToast, log 等纯工具函数
+ * TxtLlmHub — 分词/标签模块
+ * 文本分类、LLM 分词、卡片拖拽排序、标签管理、导入翻译
+ * Depends on: utils.js（$, escHtml, showToast, log）
  */
 
-// ── 分词页面状态 ──
+// ── 分词页状态 ──
 var tagState = {
   lines: [],
   files: [],
@@ -14,9 +13,11 @@ var tagState = {
   abort: false,
   query: '',
   previewRowLimit: 2000,
+  selectedIndices: new Set(),
+  tagStarted: false,  // 是否过分词任务（用于区分「开始」和「继续」）
 };
 
-// ── 分类体系（动态 schema，支持前端自定义） ──
+// ── 分类体系（动态 schema，前端可自定义） ──
 var DEFAULT_TAG_SCHEMA = {
   '硬术语': {
     color: '#4fc3f7', icon: '🔧',
@@ -63,7 +64,7 @@ function getAllSubCategories() {
   return r;
 }
 
-// ── API 配置（SPA: 直接读取顶部工具栏的共享元素） ──
+// ── API 配置（读取顶部工具栏的共享元素） ──
 function tagGetApiConfig() {
   // 直接从顶部工具栏的共享 DOM 元素读取
   var cfg = {};
@@ -78,7 +79,7 @@ function tagGetApiConfig() {
   return cfg;
 }
 
-// ── 文件上传 ──
+// ── 文件上传（分词页） ──
 async function tagProcessFiles(files) {
   var txtFiles = Array.from(files).filter(function(f) { return f.name.endsWith('.txt'); });
   if (txtFiles.length === 0) { showToast('请选择 .txt 文件'); return; }
@@ -120,7 +121,7 @@ async function tagProcessFiles(files) {
   } catch(e) { showToast('上传失败: ' + e.message); }
 }
 
-// ── 手动输入 ──
+// ── 手动输入（分词页） ──
 async function tagLoadManualInput() {
   var raw = document.getElementById('tagManualInput').value.trim();
   if (!raw) { showToast('输入内容为空'); return; }
@@ -177,7 +178,7 @@ function tagDeleteFile(index) {
   tagBtnState();
 }
 
-// ── 收起/展开 ──
+// ── 收起/展开输入区 ──
 var _tagCollapsed = false;
 function tagToggleCollapse() {
   _tagCollapsed = !_tagCollapsed;
@@ -195,7 +196,7 @@ function tagToggleCollapse() {
   }
 }
 
-// ── 预览限行数 ──
+// ── 预览行数限制 ──
 function tagOnRowLimitChange() {
   var sel = document.getElementById('tagPreviewRowLimit');
   var custom = document.getElementById('tagPreviewCustomLimit');
@@ -214,7 +215,7 @@ function tagOnCustomLimitChange() {
   if (v > 0) { tagState.previewRowLimit = v; tagRenderPreview(); }
 }
 
-// ── 预览（与翻译页完全一致的结构） ──
+// ── 预览列表 ──
 function tagRenderPreview() {
   var q = tagState.query;
   setHighlight(q);
@@ -262,7 +263,7 @@ function tagRenderPreview() {
   document.getElementById('tagPreviewCount').textContent = q ? lines.length + ' 条匹配' : filtered.length + ' 行';
 }
 
-// ── 分类栏（性能优化：限制每栏最大卡片数） ──
+// ── 分类栏（每栏最多渲染 TAG_MAX_CARDS 张卡片） ──
 var TAG_MAX_CARDS = 200; // 每栏最多渲染 200 张卡片
 
 function tagRenderColumns() {
@@ -290,6 +291,7 @@ function tagRenderColumns() {
     var shown = items.slice(0, TAG_MAX_CARDS);
     html += '<div class="tag-column" data-l1="' + l1 + '">' +
       '<div class="tag-column-header" style="border-left:3px solid ' + cat.color + '">' +
+      '<input type="checkbox" class="tag-column-select-all" data-l1="' + l1 + '" onchange="tagSelectAllInColumn(\'' + l1 + '\', this.checked)" title="全选/取消本分类">' +
       '<span class="tag-col-icon">' + cat.icon + '</span>' +
       '<span class="tag-col-title">' + escHtml(l1) + '</span>' +
       '<span class="tag-col-count" id="cnt-' + l1 + '">' + items.length + '</span></div>' +
@@ -304,6 +306,7 @@ function tagRenderColumns() {
   var unShown = untagged.slice(0, TAG_MAX_CARDS);
   html += '<div class="tag-column tag-column-untagged">' +
     '<div class="tag-column-header" style="border-left:3px solid #888">' +
+    '<input type="checkbox" class="tag-column-select-all" data-l1="" onchange="tagSelectAllInColumn(\'\', this.checked)" title="全选/取消未分类">' +
     '<span class="tag-col-icon">📋</span><span class="tag-col-title">未分类</span>' +
     '<span class="tag-col-count" id="cnt-untagged">' + untagged.length + '</span></div>' +
     '<div class="tag-column-body" data-l1="" ' +
@@ -313,12 +316,13 @@ function tagRenderColumns() {
   if (untagged.length === 0 && tagState.lines.length > 0) html += '<div class="tag-column-empty">所有词条已分类 ✓</div>';
   html += '</div></div>';
   container.innerHTML = html;
+  tagUpdateColumnSelectAllStates();
   // 如果分类标签面板处于展开状态，同步刷新
   var catPanel = document.getElementById('tagCatPanel');
   if (catPanel && catPanel.classList.contains('visible')) tagRenderCatPanel();
 }
 
-// ── 单条卡片更新（分词进行时不重建整个列表） ──
+// ── 增量更新单张卡片（分词进行时不重建整个列） ──
 function tagUpdateOneCard(line) {
   var oldCard = document.querySelector('.tag-card[data-index="' + line.index + '"]');
   var cat = line.tag_l1 ? getEnabledSchema()[line.tag_l1] : null;
@@ -374,7 +378,7 @@ function tagUpdateOneCard(line) {
   }
 }
 
-// ── 更新各栏计数 ──
+// ── 列头计数更新 ──
 function tagUpdateCounts() {
   var schema = getEnabledSchema();
   Object.keys(schema).forEach(function(l1) {
@@ -388,10 +392,12 @@ function tagUpdateCounts() {
 function tagRenderCard(l) {
   var cat = l.tag_l1 ? getEnabledSchema()[l.tag_l1] : null;
   var bc = cat ? cat.color : '#555';
+  var checkedAttr = tagState.selectedIndices.has(l.index) ? ' checked' : '';
   return '<div class="tag-card" draggable="true" data-index="' + l.index + '" data-l1="' + escHtml(l.tag_l1 || '') + '" ' +
     'ondragstart="tagCardDragStart(event)" ondragend="tagCardDragEnd(event)" ' +
     'style="border-left:3px solid ' + bc + '">' +
     '<div class="tag-card-row1">' +
+      '<input type="checkbox" class="tag-card-check" data-index="' + l.index + '"' + checkedAttr + ' onchange="tagToggleSelect(' + l.index + ', this.checked)" title="勾选后导入翻译">' +
       '<span class="tag-card-num">#' + (l.index+1) + '</span>' +
       '<span class="tag-card-orig">' + escHtml(l.original) + '</span>' +
       '<span class="tag-card-actions"><button class="btn btn-sm" onclick="tagEditCategory(' + l.index + ')">✏️</button></span>' +
@@ -402,7 +408,117 @@ function tagRenderCard(l) {
     '</div></div>';
 }
 
-// ── 拖拽 ──
+// ── 卡片选中/全选 ──
+function tagToggleSelect(index, checked) {
+  if (checked) tagState.selectedIndices.add(index);
+  else tagState.selectedIndices.delete(index);
+  tagUpdateColumnSelectAllStates();
+  tagBtnState();
+}
+
+// ── 列头全选/状态同步 ──
+function tagSelectAllInColumn(l1, checked) {
+  var lines = tagState.lines.filter(function(l) { return (l.tag_l1 || '') === l1; });
+  lines.forEach(function(l) {
+    if (checked) tagState.selectedIndices.add(l.index);
+    else tagState.selectedIndices.delete(l.index);
+  });
+  document.querySelectorAll('.tag-card-check').forEach(function(cb) {
+    var idx = parseInt(cb.dataset.index);
+    cb.checked = tagState.selectedIndices.has(idx);
+  });
+  tagUpdateColumnSelectAllStates();
+  tagBtnState();
+}
+
+function tagUpdateColumnSelectAllStates() {
+  document.querySelectorAll('.tag-column').forEach(function(col) {
+    var l1 = col.dataset.l1;
+    var lines = tagState.lines.filter(function(l) { return (l.tag_l1 || '') === l1; });
+    var total = lines.length;
+    var selected = lines.filter(function(l) { return tagState.selectedIndices.has(l.index); }).length;
+    var chk = col.querySelector('.tag-column-select-all');
+    if (chk) {
+      chk.checked = (total > 0 && selected === total);
+      chk.indeterminate = (selected > 0 && selected < total);
+    }
+  });
+}
+
+// ── 导入到翻译页（按分类分组，去重） ──
+function tagSendToTranslate() {
+  if (tagState.selectedIndices.size === 0) { showToast('请先勾选要导入的条目'); return; }
+  var selectedLines = [];
+  tagState.selectedIndices.forEach(function(idx) {
+    var line = tagState.lines[idx];
+    if (line) selectedLines.push(line);
+  });
+  if (selectedLines.length === 0) { showToast('没有有效条目可导入'); return; }
+  if (typeof state === 'undefined') { showToast('翻译页未初始化'); return; }
+
+  // 按 tag_l1 分组
+  var groups = {};
+  selectedLines.forEach(function(l) {
+    var key = l.tag_l1 || '未分类';
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(l);
+  });
+
+  // 去重：收集翻译页已有的 original 集合
+  var existingOriginals = new Set();
+  state.lines.forEach(function(l) { existingOriginals.add(l.original); });
+
+  var totalAdded = 0;
+  var fileNames = Object.keys(groups);
+  fileNames.forEach(function(fname) {
+    var groupLines = groups[fname];
+    var virtualFile = 'tag_' + fname;
+    var startIndex = state.lines.length;
+    var newLines = [];
+    groupLines.forEach(function(l, idx) {
+      if (existingOriginals.has(l.original)) return; // 跳过重复
+      newLines.push({
+        original: l.original,
+        translation: l.translation || '',
+        new_translation: '',
+        error: '',
+        keepOld: false,
+        truncated: false,
+        warning: '',
+        degraded: false,
+        _file: virtualFile,
+        index: startIndex + newLines.length,
+        _tag_l1: l.tag_l1,
+        _tag_l2: l.tag_l2,
+      });
+    });
+    if (newLines.length === 0) return;
+    state.lines = state.lines.concat(newLines);
+    if (state.fileNames.indexOf(virtualFile) === -1) {
+      state.files.push({ name: virtualFile, checked: true });
+      state.fileNames.push(virtualFile);
+    }
+    totalAdded += newLines.length;
+  });
+
+  if (totalAdded === 0) { showToast('所有条目已存在于翻译页'); return; }
+
+  rebuildIndicesAndCheckboxes();
+  renderFileList();
+  renderPreview();
+  renderCompare();
+  updateTranslateAllButton();
+  state.translateStarted = false;
+  $('translateHint').style.display = 'none';
+
+  tagState.selectedIndices.clear();
+  tagRenderColumns();
+  tagBtnState();
+  showToast('已导入 ' + totalAdded + ' 行到翻译页（' + fileNames.length + ' 个分类）');
+  switchPage('translate');
+}
+
+// ── 卡片拖拽 ──
 var _tagDragIdx = -1;
 function tagCardDragStart(e) { _tagDragIdx = parseInt(e.target.closest('.tag-card').dataset.index); e.dataTransfer.effectAllowed='move'; e.target.closest('.tag-card').classList.add('dragging'); }
 function tagCardDragEnd(e) { document.querySelectorAll('.tag-card').forEach(function(el){el.classList.remove('dragging');}); document.querySelectorAll('.tag-column-body').forEach(function(el){el.classList.remove('drag-over-col');}); }
@@ -436,7 +552,7 @@ function tagDrop(e) {
   showToast('已移至 ' + (targetL1 || '未分类')); _tagDragIdx = -1;
 }
 
-// ── 编辑分类 ──
+// ── 编辑卡片分类 ──
 function tagEditCategory(index) {
   var line = tagState.lines[index]; if (!line) return;
   var allSubs = getAllSubCategories();
@@ -454,6 +570,13 @@ function tagEditCategory(index) {
       '<button class="btn btn-primary" id="tagEditOk">确定</button>' +
       '<button class="btn" id="tagEditCancel">取消</button></div></div>';
     document.body.appendChild(modal);
+    // 点击遮罩关闭
+    modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+    // Enter 确定，Escape 关闭
+    modal.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); document.getElementById('tagEditOk').click(); }
+      if (e.key === 'Escape') { modal.style.display = 'none'; }
+    });
   }
   document.getElementById('tagEditContent').innerHTML =
     '<div style="margin-bottom:10px;padding:8px 10px;background:rgba(255,255,255,0.04);border-radius:6px;border-left:3px solid var(--accent)">' +
@@ -495,105 +618,157 @@ function tagEditPick(l1,l2) {
   for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===t){sel.selectedIndex=i;break;}}
 }
 
-// ── LLM 分词 ──
+// ── 批量分词（一次请求，NDJSON 流式返回） ──
 async function tagStart() {
   if (tagState.translating || tagState.lines.length===0) return;
-  tagState.translating = true; tagState.abort = false;
+
+  // 区分"继续分词"和"重新分词全部"
+  var pending = tagState.lines.filter(function(l) { return !l.tag_l1; });
+  var hasCompleted = tagState.lines.some(function(l) { return l.tag_l1; });
+  if (pending.length === 0 && hasCompleted) {
+    // 全部已完成 → 清空重来
+    tagState.lines.forEach(function(l) { l.tag_l1 = ''; l.tag_l2 = ''; l.confidence = 0; });
+    pending = tagState.lines.slice();
+  }
+  if (pending.length === 0) { showToast('没有待分词的条目'); return; }
+
+  tagState.translating = true; tagState.abort = false; tagState.tagStarted = true;
   document.getElementById('tagBtnStart').disabled = true;
   document.getElementById('tagBtnStop').disabled = false;
-  _tagStartRuntime(); tagLogClear(); tagLog('开始分词，共 ' + tagState.lines.length + ' 行');
+  _tagStartRuntime(); tagLogClear(); tagLog('开始分词，共 ' + pending.length + ' 行');
   var concurrency = parseInt(document.getElementById('tagConcurrency').value) || 5;
   var apiConfig = tagGetApiConfig();
-  var total = tagState.lines.length, done = 0, errors = 0;
-  for (var start = 0; start < total; start += concurrency) {
-    if (tagState.abort) { tagLog('已停止 · 完成'+done+'/'+total, 'err'); break; }
-    var chunkEnd = Math.min(start+concurrency, total);
-    var chunk = tagState.lines.slice(start, chunkEnd);
-    tagLog('块'+(Math.floor(start/concurrency)+1)+': 第'+(start+1)+'-'+chunkEnd+'行...');
-    var results = await Promise.all(chunk.map(function(line, i) {
-      return tagOneLine(line, apiConfig).then(function(r) {
-        var idx = start + i + 1;
-        if (r.error) {
-          tagLog('['+idx+'] ✗ "'+line.original.substring(0,20)+'" → '+r.error, 'err');
-        } else {
-          tagLog('['+idx+'] ✓ "'+line.original.substring(0,20)+'" → '+r.tag_l1+'/'+r.tag_l2, 'ok');
-        }
-        return r;
-      });
-    }));
-    var chunkErr = 0;
-    results.forEach(function(r,i) {
-      if (r.error) { errors++; chunkErr++; }
-      else if (chunk[i]._manualEdit) {
-        // 跳过已手动编辑的词条，不覆盖用户分类
-      }
-      else {
-        chunk[i].tag_l1=r.tag_l1; chunk[i].tag_l2=r.tag_l2; chunk[i].confidence=r.confidence||0;
-        // 增量更新这张卡片（不重建整个列）
-        tagUpdateOneCard(chunk[i]);
-      }
+  var systemPrompt = document.getElementById('tagStrategyText');
+  var strategyText = (systemPrompt && systemPrompt.value.trim()) || '你是一个游戏文本分类专家。请将以下文本归入最合适的类别。';
+  var catDesc = '';
+  var llmSchema = getEnabledSchema();
+  Object.keys(llmSchema).forEach(function(l1) { catDesc += l1+': '+llmSchema[l1].subs.join(', ')+'\n'; });
+  var fullPrompt = strategyText + '\n\n可用类别（一级 / 二级）：\n' + catDesc + '\n请严格输出以下JSON格式：{"l1":"一级类目","l2":"二级类目","confidence":0.0~1.0}\n只输出JSON，不要其他内容。';
+
+  var total = pending.length, done = 0, errors = 0;
+  try {
+    var batchBody = Object.assign({
+      items: pending.map(function(l) { return { original: l.original }; }),
+      concurrency: concurrency,
+      system_prompt: fullPrompt,
+    }, apiConfig);
+    var r = await fetch('/api/tag-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(batchBody)
     });
-    done += chunk.length;
-    document.getElementById('tagProgressFill').style.width = (done/total*100)+'%';
-    document.getElementById('tagProgressText').textContent = '进度: '+done+'/'+total+' · 成功'+(done-errors)+' · 失败'+errors;
-    tagLog('块'+(Math.floor(start/concurrency)+1)+': 完成 · 成功'+(chunk.length-chunkErr)+(chunkErr?' · 失败'+chunkErr:''), chunkErr?'err':'ok');
-    // 增量更新已在循环中逐条完成，只需更新计数
-    tagUpdateCounts();
-    tagRenderPreview();
+    if (!r.ok) {
+      var errText = '';
+      try { var ed = await r.json(); errText = ed.error || ''; } catch (ex) { errText = r.statusText; }
+      pending.forEach(function(l) { l.tag_l1 = ''; l.tag_l2 = ''; l.confidence = 0; });
+      errors = pending.length;
+      tagLog('请求失败: ' + (errText || '请求错误'), 'err');
+    } else {
+      var reader = r.body.getReader();
+      var decoder = new TextDecoder();
+      var buf = '';
+      while (true) {
+        if (tagState.abort) { reader.cancel(); break; }
+        var streamResult = await reader.read();
+        if (streamResult.done) break;
+        buf += decoder.decode(streamResult.value, { stream: true });
+        var lines = buf.split('\n');
+        buf = lines.pop();
+        for (var li = 0; li < lines.length; li++) {
+          var line = lines[li].trim();
+          if (!line) continue;
+          try {
+            var res = JSON.parse(line);
+            var pos = res.index;
+            if (pos >= 0 && pos < pending.length) {
+              var item = pending[pos];
+              if (res.error) {
+                errors++;
+                tagLog('[' + (pos+1) + '] ✗ "' + item.original.substring(0,20) + '" → ' + res.error, 'err');
+              } else if (!item._manualEdit) {
+                item.tag_l1 = res.tag_l1;
+                item.tag_l2 = res.tag_l2;
+                item.confidence = res.confidence || 0;
+                tagUpdateOneCard(item);
+                tagLog('[' + (pos+1) + '] ✓ "' + item.original.substring(0,20) + '" → ' + res.tag_l1 + '/' + res.tag_l2, 'ok');
+              }
+              done++;
+            }
+          } catch (parseErr) {}
+        }
+        document.getElementById('tagProgressFill').style.width = (done/total*100)+'%';
+        document.getElementById('tagProgressText').textContent = '进度: '+done+'/'+total+' · 成功'+(done-errors)+' · 失败'+errors;
+        tagUpdateCounts();
+        tagRenderPreview();
+      }
+      // 处理 buffer 残留
+      if (buf.trim()) {
+        try {
+          var lastRes = JSON.parse(buf.trim());
+          var lastPos = lastRes.index;
+          if (lastPos >= 0 && lastPos < pending.length) {
+            var lastItem = pending[lastPos];
+            if (lastRes.error) { errors++; }
+            else if (!lastItem._manualEdit) {
+              lastItem.tag_l1 = lastRes.tag_l1;
+              lastItem.tag_l2 = lastRes.tag_l2;
+              lastItem.confidence = lastRes.confidence || 0;
+              tagUpdateOneCard(lastItem);
+            }
+            done++;
+          }
+        } catch (e2) {}
+      }
+    }
+  } catch (e) {
+    tagLog('异常: ' + e.message, 'err');
   }
+
   tagState.translating=false; tagState.abort=false; _tagStopRuntime();
-  // 最终全量同步（确保增量更新中的边界情况被修正）
+  // 全部完成时清除 started 标志
+  var stillPending = tagState.lines.filter(function(l) { return !l.tag_l1; }).length;
+  if (stillPending === 0) tagState.tagStarted = false;
   tagRenderColumns();
   tagRenderPreview();
-  document.getElementById('tagBtnStart').disabled=false;
+  tagUpdateTagStartButton();
   document.getElementById('tagBtnStop').disabled=true;
   tagLog('分词结束: 成功'+(done-errors)+'行'+(errors?' · 失败'+errors+'行':''), errors?'err':'ok');
   showToast('分词完成：成功'+(done-errors)+'行'+(errors?'，失败'+errors+'行':''));
   tagBtnState();
 }
 
-async function tagOneLine(line, apiConfig) {
-  if (!line.original.trim()) return {tag_l1:'',tag_l2:'',confidence:0};
-  try {
-    var catDesc = '';
-    var llmSchema = getEnabledSchema();
-    Object.keys(llmSchema).forEach(function(l1) { catDesc += l1+': '+llmSchema[l1].subs.join(', ')+'\n'; });
-    var systemPrompt = '你是一个游戏文本分类专家。请将以下文本归入最合适的类别。\n\n可用类别（一级 / 二级）：\n'+catDesc+
-      '\n请严格输出以下JSON格式：{"l1":"一级类目","l2":"二级类目","confidence":0.0~1.0}\n只输出JSON，不要其他内容。';
-    var body = Object.assign({text: line.original, system_prompt: systemPrompt, max_tokens: 100, temperature: 0.1}, apiConfig);
-    var r = await fetch('/api/tag', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-    var d = await r.json();
-    if (r.ok && d.translation) return tagParseResponse(d.translation);
-    return {tag_l1:'',tag_l2:'',confidence:0, error: d.error||'分类失败'};
-  } catch(e) { return {tag_l1:'',tag_l2:'',confidence:0, error:e.message}; }
-}
-
-function tagParseResponse(text) {
-  try {
-    var s = text.indexOf('{'), e = text.lastIndexOf('}');
-    if (s===-1||e===-1) return {tag_l1:'',tag_l2:'',confidence:0};
-    var j = JSON.parse(text.substring(s,e+1));
-    var l1 = j.l1||'', l2 = j.l2||'', conf = j.confidence||0;
-    var parseSchema = getEnabledSchema();
-    if (!parseSchema[l1]) {
-      var keys = Object.keys(parseSchema);
-      for (var i=0;i<keys.length;i++) { if (l1.indexOf(keys[i])>=0||keys[i].indexOf(l1)>=0) { l1=keys[i]; break; } }
-      if (!parseSchema[l1]) return {tag_l1:'',tag_l2:'',confidence:0};
-    }
-    var subs = parseSchema[l1].subs;
-    if (subs.indexOf(l2)===-1) {
-      for (var j2=0;j2<subs.length;j2++) { if (l2.indexOf(subs[j2])>=0||subs[j2].indexOf(l2)>=0) { l2=subs[j2]; break; } }
-      if (subs.indexOf(l2)===-1) l2 = subs[0]||'';
-    }
-    return {tag_l1:l1, tag_l2:l2, confidence:conf};
-  } catch(e) { return {tag_l1:'',tag_l2:'',confidence:0}; }
-}
-
 function tagStop() { tagState.abort=true; document.getElementById('tagBtnStop').disabled=true; showToast('正在停止...'); }
+
+function tagUpdateTagStartButton() {
+  var btn = document.getElementById('tagBtnStart');
+  if (!btn) return;
+  if (tagState.translating) {
+    btn.disabled = true;
+    btn.textContent = '分词中...';
+    return;
+  }
+  if (tagState.lines.length === 0) {
+    btn.disabled = true;
+    btn.textContent = '开始分词';
+    return;
+  }
+  var pending = tagState.lines.filter(function(l) { return !l.tag_l1; });
+  var hasCompleted = tagState.lines.some(function(l) { return l.tag_l1; });
+  if (tagState.tagStarted && pending.length > 0) {
+    btn.disabled = false;
+    btn.textContent = '继续分词 (' + pending.length + ')';
+  } else if (hasCompleted) {
+    btn.disabled = false;
+    btn.textContent = '重新分词全部';
+  } else {
+    btn.disabled = false;
+    btn.textContent = '开始分词';
+  }
+}
 
 function tagClearAll() {
   if (tagState.lines.length===0) return;
-  tagState.lines=[]; tagState.files=[]; tagState.fileNames=[]; tagState.query='';
+  tagState.lines=[]; tagState.files=[]; tagState.fileNames=[]; tagState.query=''; tagState.selectedIndices.clear(); tagState.tagStarted=false;
   document.getElementById('tagSearch').value='';
   document.getElementById('tagManualInput').value='';
   tagRenderFileList(); tagRenderPreview(); tagRenderColumns();
@@ -653,19 +828,22 @@ function tagTriggerDownload(name, content) {
   URL.revokeObjectURL(url);
 }
 
-// ── 搜索 ──
+// ── 搜索（分词页） ──
 function tagOnSearch() { tagState.query = document.getElementById('tagSearch').value; tagRenderPreview(); }
 function tagClearSearch() { document.getElementById('tagSearch').value=''; tagState.query=''; tagRenderPreview(); }
 
-// ── 按钮状态 ──
+// ── 按钮状态管理 ──
 function tagBtnState() {
   var has = tagState.lines.length > 0;
-  document.getElementById('tagBtnStart').disabled = !has || tagState.translating;
   document.getElementById('tagBtnClear').disabled = !has;
   document.getElementById('tagBtnExport').disabled = !tagState.lines.some(function(l){return l.tag_l1;});
+  var hasSelected = tagState.selectedIndices.size > 0;
+  var importBtn = document.getElementById('tagBtnImport');
+  if (importBtn) importBtn.disabled = !hasSelected || (typeof state !== 'undefined' && state.translating);
+  tagUpdateTagStartButton();
 }
 
-// ── 计时器 ──
+// ── 运行计时器 ──
 var _tagT0=0, _tagTmr=0;
 function _tagStartRuntime() {
   _tagT0=Date.now(); var rd=document.getElementById('tagRuntimeDisplay');
@@ -674,7 +852,7 @@ function _tagStartRuntime() {
 }
 function _tagStopRuntime() { clearInterval(_tagTmr); document.getElementById('tagRuntimeDisplay').style.display='none'; }
 
-// ── 日志 ──
+// ── 分词日志 ──
 function tagLog(msg, cls) {
   var area = document.getElementById('tagLogArea'); if (!area) return;
   area.classList.add('visible');
@@ -687,7 +865,7 @@ function tagLog(msg, cls) {
 }
 function tagLogClear() { var a=document.getElementById('tagLogArea'); if(a){a.innerHTML='';a.classList.remove('visible');} }
 
-// ── 分类标签面板（类似翻译页 System Prompt 折叠面板） ──
+// ── 分类标签面板 ──
 function tagToggleCatPanel() {
   var panel = document.getElementById('tagCatPanel');
   var toggle = document.getElementById('tagCatToggle');
@@ -698,6 +876,77 @@ function tagToggleCatPanel() {
     panel.classList.add('visible');
     toggle.textContent = '分类标签 ▲';
     tagRenderCatPanel();
+  }
+}
+
+// ── 分类策略面板 ──
+var _tagStrategyPresets = [
+  { name: '游戏本地化', text: '你是一个游戏文本分类专家。请将以下文本归入最合适的类别。' },
+  { name: 'UI/软件', text: '你是一个软件界面文本分类专家。请将以下文本归入最合适的类别。重点关注菜单、按钮、提示信息等UI元素。' },
+  { name: '文学/小说', text: '你是一个文学翻译文本分类专家。请将以下文本归入最合适的类别。重点关注叙事风格、修辞手法和文学性表达。' },
+];
+
+function tagToggleStrategy() {
+  var row = document.getElementById('tagStrategyRow');
+  var toggle = document.getElementById('tagStrategyToggle');
+  if (row.style.display === 'flex') {
+    row.style.display = 'none';
+    toggle.textContent = '分类策略 ▼';
+  } else {
+    row.style.display = 'flex';
+    toggle.textContent = '分类策略 ▲';
+    tagRenderStrategyPresets();
+  }
+}
+
+function tagRenderStrategyPresets() {
+  var container = document.getElementById('tagStrategyPresets');
+  if (!container) return;
+  var html = '';
+  _tagStrategyPresets.forEach(function(p, i) {
+    html += '<span class="prompt-chip preset" onclick="tagLoadStrategyPreset(' + i + ')" style="max-width:100px"><span class="chip-text">' + p.name + '</span></span>';
+  });
+  container.innerHTML = html;
+}
+
+function tagLoadStrategyPreset(index) {
+  var p = _tagStrategyPresets[index];
+  if (!p) return;
+  var ta = document.getElementById('tagStrategyText');
+  if (ta) ta.value = p.text;
+  localStorage.setItem('tllmh_tag_strategy', p.text);
+  showToast('已加载: ' + p.name);
+}
+
+function saveTagStrategy() {
+  var ta = document.getElementById('tagStrategyText');
+  if (ta) localStorage.setItem('tllmh_tag_strategy', ta.value);
+}
+
+function resetTagStrategy() {
+  var ta = document.getElementById('tagStrategyText');
+  if (ta) {
+    ta.value = _tagStrategyPresets[0].text;
+    localStorage.setItem('tllmh_tag_strategy', ta.value);
+  }
+  showToast('已恢复默认分类策略');
+}
+
+function _initTagStrategy() {
+  var ta = document.getElementById('tagStrategyText');
+  if (!ta) return;
+  var saved = localStorage.getItem('tllmh_tag_strategy');
+  if (saved !== null) {
+    ta.value = saved;
+  } else {
+    // 从后端加载默认值
+    try {
+      fetch('/api/config').then(function(r) { return r.json(); }).then(function(d) {
+        if (d.default_tag_strategy && !localStorage.getItem('tllmh_tag_strategy')) {
+          ta.value = d.default_tag_strategy;
+        }
+      });
+    } catch (e) { /* ignore */ }
   }
 }
 
@@ -733,7 +982,7 @@ function tagRenderCatPanel() {
   panel.innerHTML = html;
 }
 
-// ── 管理标签面板（可视化增删改一级/二级类目） ──
+// ── 标签管理面板（增删改一级/二级类目） ──
 function tagOpenAdmin() {
   var schema = getTagSchema();
   var modal = document.getElementById('tagAdminModal');
@@ -750,6 +999,10 @@ function tagOpenAdmin() {
         '<button class="btn" id="tagAdminCancel">取消</button>' +
       '</div></div>';
     document.body.appendChild(modal);
+    // 点击遮罩关闭
+    modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+    // Escape 关闭
+    modal.addEventListener('keydown', function(e) { if (e.key === 'Escape') modal.style.display = 'none'; });
     document.getElementById('tagAdminCancel').onclick = function() { modal.style.display = 'none'; };
     document.getElementById('tagAdminSave').onclick = function() {
       var newSchema = {};
@@ -853,7 +1106,7 @@ function tagAdminRemoveGroup(btn) {
   btn.closest('.tag-admin-group').remove();
 }
 
-// ── 初始化（SPA: 由 switchPage 调用，只执行一次） ──
+// ── 初始化（由 switchPage 懒调用，只执行一次） ──
 function tagInit() {
   // 绑定拖拽上传
   var dz = document.getElementById('tagDropZone');
@@ -865,7 +1118,23 @@ function tagInit() {
     dz.addEventListener('drop', function(e){e.preventDefault();dz.classList.remove('drag-over');if(e.dataTransfer.files.length>0)tagProcessFiles(e.dataTransfer.files);});
     fi.addEventListener('change', function(){if(fi.files.length>0)tagProcessFiles(fi.files);});
   }
-  // API 配置已由顶部工具栏共享管理，无需单独加载
+  // 初始化分类策略
+  _initTagStrategy();
+  // 选中状态变化时更新按钮
+  document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('tag-card-check') || e.target.classList.contains('tag-column-select-all')) {
+      tagBtnState();
+    }
+  });
+  // 点击外部关闭标签搜索下拉框
+  document.addEventListener('click', function(e) {
+    var dd = document.getElementById('tagEditDropdown');
+    if (dd && dd.style.display !== 'none') {
+      if (!e.target.closest('#tagEditDropdown') && !e.target.closest('#tagEditSearch')) {
+        dd.style.display = 'none';
+      }
+    }
+  });
   // 初始渲染
   tagRenderColumns();
 }

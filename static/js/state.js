@@ -1,11 +1,10 @@
 /**
- * TxtLlmHub — State Management & Persistence
- * Global application state, localStorage persistence, LLM parameters,
- * API configuration, provider switching, and prompt template management.
+ * TxtLlmHub — 状态管理与持久化
+ * 全局状态、localStorage 持久化、LLM 参数、API 配置、Provider 切换、提示词模板
  * Depends on: utils.js
  */
 
-// ── Global Application State ──
+// ── 全局状态 ──
 const state = {
   lines: [],
   fileNames: [],
@@ -14,17 +13,17 @@ const state = {
   previewQuery: '',
   compareQuery: '',
   translateMode: 'direct',
-  sortState: 0,               // 0=original order, 1=sort by original asc, 2=sort by new translation asc
-  _lastTranslateMode: '',     // tracks mode used in last batch translate, for detecting mode switch
-  previewChecked: new Set(),  // checked item indices in the preview column
+  sortState: 0,
+  previewChecked: new Set(),  // 预览列选中的索引集合
   llmProvider: 'local',       // 'local' | 'commercial'
   compareChecked: new Set(),
   files: [],                   // [{name, checked}] 来源文件管理
   previewRowLimit: 2000,       // 预览行数上限
-  // checked item indices
-  _resumeMode: false,          // true when translation was aborted by mode switch
+  hiddenRulesEnabled: true,    // 翻译策略开关
+  hiddenRulesText: '',         // 自定义翻译策略文本
+  translateStarted: false,     // 是否过翻译任务（用于区分「翻译全部」和「继续翻译」）
 };
-// ── Reindex lines and rebuild checked sets after array mutations ──
+// ── 索引重建（数组增删后调用） ──
 function rebuildIndicesAndCheckboxes() {
   for (var i = 0; i < state.lines.length; i++) { state.lines[i].index = i; }
   var newPC = new Set();
@@ -102,9 +101,9 @@ function setPolishStep2Prompt(text) {
   else { localStorage.removeItem('tllmh_polish_step2'); }
 }
 
-// ── LLM Parameter Persistence ──
+// ── LLM 参数持久化 ──
 function resetParamDefault(el) {
-  var defaults = { temperature: '0.7', top_p: '0.6', max_tokens: '512', repetition_penalty: '1.05' };
+  var defaults = { temperature: '0.7', top_p: '0.6', max_tokens: '1024', repetition_penalty: '1.05' };
   if (defaults[el.id]) el.value = defaults[el.id];
   if (window.getSelection) window.getSelection().removeAllRanges();
   el.blur();
@@ -124,9 +123,9 @@ function saveModeParams(mode) {
 
 function loadModeParams(mode) {
   var def = mode === 'polish'
-    ? { temperature: '0.7', top_p: '0.6', max_tokens: '512', repetition_penalty: '1.05',
+    ? { temperature: '0.7', top_p: '0.6', max_tokens: '1024', repetition_penalty: '1.05',
         system_prompt: POLISH_DIRECT_DEFAULT }
-    : { temperature: '0.7', top_p: '0.6', max_tokens: '512', repetition_penalty: '1.05',
+    : { temperature: '0.7', top_p: '0.6', max_tokens: '1024', repetition_penalty: '1.05',
         system_prompt: DIRECT_DEFAULT };
   try {
     var saved = JSON.parse(localStorage.getItem('tllmh_params_' + mode) || '{}');
@@ -148,25 +147,56 @@ function getLLMParams() {
   var p = {
     temperature: parseFloat($('temperature').value) || 0.3,
     top_p: parseFloat($('top_p').value) || 0.6,
-    max_tokens: parseInt($('max_tokens').value) || 512,
+    max_tokens: parseInt($('max_tokens').value) || 1024,
     repetition_penalty: parseFloat($('repetition_penalty').value) || 1.05,
     system_prompt: $('system_prompt').value.trim() || undefined,
   };
-  // For polish mode, attach the hidden step2 prompt
+  // 润色模式附带 Step2 提示词
   if (state.translateMode === 'polish') {
     p.polish_prompt = getPolishStep2Prompt();
+  }
+  // 翻译策略：仅对默认混合提示词生效，预设自带策略时跳过
+  var currentPrompt = ($('system_prompt').value || '').trim();
+  var defaultPrompt = state.translateMode === 'polish' ? POLISH_DIRECT_DEFAULT : DIRECT_DEFAULT;
+  var isDefaultPrompt = (currentPrompt === defaultPrompt);
+  // 显示/隐藏翻译策略面板
+  var hrRow = $('hiddenRulesRow');
+  if (hrRow) hrRow.style.display = isDefaultPrompt ? 'none' : 'none'; // 始终隐藏，由 toggle 控制展开
+  var hrToggle = $('hiddenRulesToggle');
+  if (hrToggle) hrToggle.style.opacity = isDefaultPrompt ? '1' : '0.4';
+  if (hrToggle) hrToggle.title = isDefaultPrompt ? '展开/折叠翻译策略' : '翻译策略仅对默认提示词生效';
+  if (isDefaultPrompt) {
+    var hrEnabled = $('hiddenRulesEnabled');
+    var hrText = $('hiddenRulesText');
+    if (hrEnabled) {
+      state.hiddenRulesEnabled = hrEnabled.checked;
+      localStorage.setItem('tllmh_hidden_rules_enabled', String(hrEnabled.checked));
+    }
+    if (hrText) {
+      state.hiddenRulesText = hrText.value.trim();
+      localStorage.setItem('tllmh_hidden_rules_text', hrText.value);
+    }
+    if (state.hiddenRulesEnabled) {
+      p.hidden_rules = state.hiddenRulesText || undefined;
+    } else {
+      p.hidden_rules = '';
+    }
+  } else {
+    // 预设/自定义提示词：不传 hidden_rules，后端会用默认规则
+    // 但预设自带完整策略，默认规则反而干扰，所以传空
+    p.hidden_rules = '';
   }
   if (_modeReady) saveModeParams(state.translateMode);
   return p;
 }
 
-// ── Translation Mode Switching ──
+// ── 翻译模式切换 ──
 async function setMode(mode) {
   if (state.translateMode === mode) return;
-  // If translation is running, abort and mark for resume
+  // 翻译进行中则中止
   if (state.translating) {
     state.abort = true;
-    state._resumeMode = true;
+    while (state.translating) { await new Promise(function(r) { setTimeout(r, 50); }); }
   }
   var hasNew = state.lines.some(function (l) { return l.new_translation; });
   var shouldClear = true;
@@ -180,15 +210,17 @@ async function setMode(mode) {
       state.lines[i].keepOld = false;
       state.lines[i].truncated = false;
       state.lines[i].warning = '';
+      state.lines[i].degraded = false;
     }
-    state._resumeMode = false;
     renderPreview();
     renderCompare();
+    state.translateStarted = false;
   }
   if (_modeReady) saveModeParams(state.translateMode);
   state.translateMode = mode;
   localStorage.setItem('tllmh_mode', mode);
   loadModeParams(mode);
+  _updateHiddenRulesUI();
   if ($('promptRow').style.display === 'flex') renderSavedPrompts();
   var d = document.getElementById('btnModeDirect');
   var p = document.getElementById('btnModePolish');
@@ -201,16 +233,31 @@ async function setMode(mode) {
 function updateTranslateAllButton() {
   var btn = $('btnTranslateAll');
   if (!btn) return;
-  if (state._resumeMode) {
-    btn.textContent = '继续翻译';
-    btn.disabled = false;
-  } else {
+  if (state.translating) {
+    btn.disabled = true;
+    btn.textContent = '翻译中...';
+    return;
+  }
+  if (state.lines.length === 0) {
+    btn.disabled = true;
     btn.textContent = '翻译全部';
-    btn.disabled = (state.lines.length === 0 || state.lines.every(function (l) { return l.new_translation && !l.error; }));
+    return;
+  }
+  var pending = state.lines.filter(function (l) { return !l.new_translation && !l.error; });
+  var hasCompleted = state.lines.some(function (l) { return l.new_translation && !l.error; });
+  if (state.translateStarted && pending.length > 0) {
+    btn.disabled = false;
+    btn.textContent = '继续翻译 (' + pending.length + ')';
+  } else if (hasCompleted) {
+    btn.disabled = false;
+    btn.textContent = '重新翻译全部';
+  } else {
+    btn.disabled = false;
+    btn.textContent = '翻译全部';
   }
 }
 
-// ── API Configuration (Commercial Model) ──
+// ── API 配置（商业模型） ──
 function getApiConfig() {
   var cfg = { provider: state.llmProvider };
   if (state.llmProvider !== 'commercial') return cfg;
@@ -263,7 +310,7 @@ async function testApiConnection() {
   } catch (e) { showToast('请求失败: ' + e.message); }
 }
 
-// ── Provider Switching（SPA: 同时更新翻译页和分词页的按钮状态） ──
+// ── Provider 切换 ──
 function setProvider(provider) {
   if (state.llmProvider === provider) return;
   state.llmProvider = provider;
@@ -286,7 +333,62 @@ function onThinkingChange() {
   if (cb && cb.checked) { showToast('已启用思考模式（速度较慢）'); }
 }
 
-// Provider init (runs immediately)
+// ── 翻译策略控制（隐性规则，仅对默认提示词生效） ──
+function toggleHiddenRules() {
+  var row = $('hiddenRulesRow');
+  var toggle = $('hiddenRulesToggle');
+  // 检查当前是否为默认提示词
+  var currentPrompt = ($('system_prompt') ? $('system_prompt').value : '').trim();
+  var defaultPrompt = state.translateMode === 'polish' ? POLISH_DIRECT_DEFAULT : DIRECT_DEFAULT;
+  if (currentPrompt !== defaultPrompt) {
+    showToast('翻译策略仅对默认提示词生效，预设自带策略');
+    return;
+  }
+  if (row.style.display === 'flex') {
+    row.style.display = 'none';
+    toggle.textContent = '翻译策略 ▼';
+  } else {
+    row.style.display = 'flex';
+    toggle.textContent = '翻译策略 ▲';
+  }
+}
+
+function _initHiddenRules() {
+  try {
+    var savedEnabled = localStorage.getItem('tllmh_hidden_rules_enabled');
+    if (savedEnabled !== null) {
+      state.hiddenRulesEnabled = savedEnabled === 'true';
+    }
+    var savedText = localStorage.getItem('tllmh_hidden_rules_text');
+    if (savedText !== null) {
+      state.hiddenRulesText = savedText.trim();
+    }
+  } catch (e) { /* ignore */ }
+  var cb = $('hiddenRulesEnabled');
+  if (cb) cb.checked = state.hiddenRulesEnabled;
+  var ta = $('hiddenRulesText');
+  if (ta) ta.value = state.hiddenRulesText;
+  _updateHiddenRulesUI();
+}
+
+function _updateHiddenRulesUI() {
+  var currentPrompt = ($('system_prompt') ? $('system_prompt').value : '').trim();
+  var defaultPrompt = state.translateMode === 'polish' ? POLISH_DIRECT_DEFAULT : DIRECT_DEFAULT;
+  var isDefault = (currentPrompt === defaultPrompt);
+  var toggle = $('hiddenRulesToggle');
+  if (toggle) {
+    toggle.style.opacity = isDefault ? '1' : '0.4';
+    toggle.title = isDefault ? '展开/折叠翻译策略' : '翻译策略仅对默认提示词生效，预设自带策略';
+  }
+  // 如果当前不是默认提示词，折叠面板
+  if (!isDefault) {
+    var row = $('hiddenRulesRow');
+    if (row) row.style.display = 'none';
+    if (toggle) toggle.textContent = '翻译策略 ▼';
+  }
+}
+
+// ── Provider 初始化 ──
 (function () {
   var saved = localStorage.getItem('tllmh_provider') || 'local';
   state.llmProvider = saved;
@@ -302,7 +404,7 @@ function onThinkingChange() {
   }
 })();
 
-// ── LLM Connectivity Check（SPA: 共享同一 llmStatus） ──
+// ── LLM 连通性检测 ──
 async function checkLLM() {
   try {
     var providerLabel = state.llmProvider === 'local' ? '本地' : '商业';
@@ -338,7 +440,7 @@ async function loadDefaults() {
       localStorage.setItem('tllmh_params_direct', JSON.stringify({
         temperature: d.defaults.temperature || 0.7,
         top_p: d.defaults.top_p || 0.6,
-        max_tokens: d.defaults.max_tokens || 512,
+        max_tokens: d.defaults.max_tokens || 1024,
         repetition_penalty: d.defaults.repetition_penalty || 1.05,
         system_prompt: d.defaults.system_prompt,
       }));
@@ -347,17 +449,26 @@ async function loadDefaults() {
       localStorage.setItem('tllmh_params_polish', JSON.stringify({
         temperature: d.polish_defaults.temperature || 0.7,
         top_p: d.polish_defaults.top_p || 0.6,
-        max_tokens: d.polish_defaults.max_tokens || 512,
+        max_tokens: d.polish_defaults.max_tokens || 1024,
         repetition_penalty: d.polish_defaults.repetition_penalty || 1.05,
         system_prompt: d.polish_defaults.system_prompt,
       }));
     }
+    // 加载后端默认翻译策略（基础规则，润色糅合规则由后端自动追加）
+    if (d.hidden_rules_base && !localStorage.getItem('tllmh_hidden_rules_text')) {
+      state.hiddenRulesText = d.hidden_rules_base.trim();
+    }
+    // 存储后端预设（供未来扩展）
+    if (d.presets) {
+      window._backendPresets = d.presets;
+    }
   } catch (e) { /* ignore */ }
+  _initHiddenRules();
   loadModeParams(state.translateMode);
   _modeReady = true;
 }
 
-// ── Prompt Template Management ──
+// ── 提示词模板管理 ──
 function promptKey() { return 'tllmh_prompts_' + state.translateMode; }
 
 function showPromptBar() {
@@ -380,7 +491,7 @@ function savePrompt() {
   var n = prompts.length + 1;
   if (!title) title = '提示词' + n;
   var entry = { id: Date.now(), name: title, text: text };
-  // For polish mode, also save the current hidden step2 prompt
+  // 润色模式同时保存 Step2 提示词
   if (state.translateMode === 'polish') {
     entry.step2 = getPolishStep2Prompt();
   }
@@ -391,7 +502,7 @@ function savePrompt() {
 }
 
 function loadSavedPrompt(id) {
-  // Check presets first
+  // 优先匹配内置预设
   var presets = PRESET_PROMPTS[state.translateMode] || [];
   var preset = presets.find(function (x) { return x.id === id; });
   if (preset) {
@@ -400,23 +511,25 @@ function loadSavedPrompt(id) {
       setPolishStep2Prompt(preset.step2);
     }
     showToast('已加载: ' + preset.name);
+    _updateHiddenRulesUI();
     return;
   }
-  // Check user-saved prompts
+  // 匹配用户自定义提示词
   var prompts = JSON.parse((localStorage.getItem(promptKey()) || '[]'));
   var p = prompts.find(function (x) { return x.id === id; });
   if (p) {
     $('system_prompt').value = p.text;
-    // For polish mode, also restore the paired step2
+    // 润色模式同时恢复配对的 Step2
     if (state.translateMode === 'polish' && p.step2) {
       setPolishStep2Prompt(p.step2);
     }
     showToast('已加载: ' + p.name);
+    _updateHiddenRulesUI();
   }
 }
 
 function deletePrompt(id) {
-  // Block deletion of preset prompts
+  // 内置预设不可删除
   if (String(id).indexOf('__preset_') === 0) return;
   var prompts = JSON.parse((localStorage.getItem(promptKey()) || '[]'));
   prompts = prompts.filter(function (x) { return x.id !== id; });
@@ -429,20 +542,20 @@ function renderSavedPrompts() {
   var userPrompts = JSON.parse((localStorage.getItem(promptKey()) || '[]'));
   var savedHtml = '';
 
-  // Render presets first (locked, no delete button)
+  // 先渲染内置预设（锁定，无删除按钮）
   presets.forEach(function (p) {
     savedHtml += '<span class="prompt-chip preset" onclick="loadSavedPrompt(\'' + p.id + '\')" data-tooltip="' + escHtml(p.text) + '">' +
 '<span class="chip-text">' + escHtml(p.name) + '</span>' +
       '</span>';
   });
-  // Render user-saved prompts
+  // 渲染用户自定义提示词
   userPrompts.forEach(function (p) {
     savedHtml += '<span class="prompt-chip" onclick="loadSavedPrompt(' + p.id + ')" data-tooltip="' + escHtml(p.text) + '">' +
       '<span class="chip-text">' + escHtml(p.name) + '</span>' +
       '<span class="chip-del" onclick="deletePrompt(' + p.id + ');event.stopPropagation()">&times;</span></span>';
   });
   $('savedPrompts').innerHTML = savedHtml;
-  // Animate overflowing chip text
+  // 溢出芯片文本滚动动画
   requestAnimationFrame(function () {
     requestAnimationFrame(function () {
       var texts = document.querySelectorAll('.chip-text');
@@ -477,12 +590,95 @@ function resetSystemPrompt() {
   var mode = state.translateMode;
   var defaults = mode === 'polish' ? POLISH_DIRECT_DEFAULT : DIRECT_DEFAULT;
   $('system_prompt').value = defaults;
-  // For polish mode, also reset the hidden step2 to default
+  // 润色模式同时重置 Step2 为默认值
   if (mode === 'polish') {
     setPolishStep2Prompt(POLISH_STEP2_DEFAULT);
   }
   saveModeParams(mode);
+  _updateHiddenRulesUI();
   showToast('已恢复默认提示词');
+}
+
+function resetHiddenRules() {
+  try {
+    fetch('/api/config').then(function(resp) { return resp.json(); }).then(function(d) {
+      var rules = (d.hidden_rules_base || d.hidden_rules || '').trim();
+      if (rules) {
+        state.hiddenRulesText = rules;
+        $('hiddenRulesText').value = rules;
+        localStorage.setItem('tllmh_hidden_rules_text', rules);
+        showToast('已恢复默认翻译策略');
+      }
+    });
+  } catch (e) { /* ignore */ }
+}
+
+// ── 提示词导入/导出（JSON 格式） ──
+function exportPrompts() {
+  var data = {
+    version: 1,
+    direct: [],
+    polish: [],
+    hidden_rules_enabled: state.hiddenRulesEnabled,
+    hidden_rules_text: state.hiddenRulesText,
+    polish_step2: getPolishStep2Prompt(),
+  };
+  try {
+    data.direct = JSON.parse(localStorage.getItem('tllmh_prompts_direct') || '[]');
+    data.polish = JSON.parse(localStorage.getItem('tllmh_prompts_polish') || '[]');
+  } catch (e) { /* ignore */ }
+  var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'TxtLlmHub_prompts.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('已导出提示词配置');
+}
+
+function importPrompts() {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        if (!data.version) { showToast('无效的提示词配置文件'); return; }
+        if (data.direct && data.direct.length > 0) {
+          localStorage.setItem('tllmh_prompts_direct', JSON.stringify(data.direct));
+        }
+        if (data.polish && data.polish.length > 0) {
+          localStorage.setItem('tllmh_prompts_polish', JSON.stringify(data.polish));
+        }
+        if (typeof data.hidden_rules_enabled === 'boolean') {
+          state.hiddenRulesEnabled = data.hiddenRulesEnabled;
+          localStorage.setItem('tllmh_hidden_rules_enabled', String(data.hidden_rules_enabled));
+          var cb = $('hiddenRulesEnabled');
+          if (cb) cb.checked = data.hidden_rules_enabled;
+        }
+        if (data.hidden_rules_text) {
+          state.hiddenRulesText = data.hidden_rules_text;
+          localStorage.setItem('tllmh_hidden_rules_text', data.hidden_rules_text);
+          var ta = $('hiddenRulesText');
+          if (ta) ta.value = data.hidden_rules_text;
+        }
+        if (data.polish_step2) {
+          setPolishStep2Prompt(data.polish_step2);
+        }
+        renderSavedPrompts();
+        showToast('已导入提示词配置（' + ((data.direct||[]).length + (data.polish||[]).length) + ' 条）');
+      } catch (ex) {
+        showToast('导入失败: ' + ex.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
 }
 
 // ── Button state helpers ──
@@ -495,6 +691,9 @@ function updateManualBtn() {
 function updateRetryButton() {
   var failed = state.lines.filter(function (l) { return l.error; }).length;
   $('btnRetryFailed').disabled = (failed === 0);
+  var checked = state.compareChecked.size;
+  var rsBtn = $('btnRetrySelected');
+  if (rsBtn) rsBtn.disabled = (checked === 0);
 }
 function updateExportCheckedButton() {
   var btn = $('btnExportChecked');

@@ -160,10 +160,11 @@
         <label title="核采样：限制候选词范围。越低越保守，越高越多样。&#10;取 1=不限制，取 0.5=只考虑前 50% 概率的候选词&#10;双击恢复默认值 0.6" ondblclick="resetParamDefault(this.nextElementSibling)">Top P</label>
         <input type="number" id="top_p" value="0.6" min="0" max="1" step="0.05" class="param-input" onchange="saveModeParams(state.translateMode)">
         <label title="输出长度上限：限制每次翻译的最大输出量。&#10;设太小可能截断长句，设太大拖慢速度。&#10;双击恢复默认值 512" ondblclick="resetParamDefault(this.nextElementSibling)">Max Tokens</label>
-        <input type="number" id="max_tokens" value="512" min="1" max="4096" class="param-input" onchange="saveModeParams(state.translateMode)">
+        <input type="number" id="max_tokens" value="1024" min="1" max="4096" class="param-input" onchange="saveModeParams(state.translateMode)">
         <label title="重复惩罚：越高越避免重复用词，但过高可能导致用词不自然。&#10;取 1=不惩罚，1.05=轻微惩罚，1.2=明显惩罚&#10;双击恢复默认值 1.05" ondblclick="resetParamDefault(this.nextElementSibling)">Rep Penalty</label>
         <input type="number" id="repetition_penalty" value="1.05" min="1" max="2" step="0.05" class="param-input" onchange="saveModeParams(state.translateMode)">
         <span class="prompt-toggle" id="promptToggle" onclick="togglePrompt()">System Prompt ▼</span><button class="btn btn-sm" onclick="resetSystemPrompt()" title="恢复当前模式的默认提示词" style="padding:2px 6px;font-size:0.85rem;margin-left:4px">↻</button>
+        <span class="prompt-toggle" id="hiddenRulesToggle" onclick="toggleHiddenRules()" style="margin-left:8px">翻译策略 ▼</span><button class="btn btn-sm" onclick="resetHiddenRules()" title="恢复默认翻译策略" style="padding:2px 6px;font-size:0.85rem;margin-left:4px">↻</button>
       </div>
       <div id="promptRow" style="display:none;flex-direction:column;gap:6px;margin-bottom:8px">
         <textarea class="prompt-area visible" id="system_prompt" placeholder="System prompt..." onchange="saveModeParams(state.translateMode)" style="width:100%;min-height:70px;resize:vertical;margin-bottom:0"></textarea>
@@ -172,7 +173,20 @@
           <button class="btn btn-sm btn-primary" id="btnSavePrompt" onclick="savePrompt()" style="flex-shrink:0">保存</button>
           <span style="font-size:0.7rem;color:var(--text-muted);white-space:nowrap;flex-shrink:0" id="saveMsg"></span><span style="width:1px;height:16px;background:rgba(255,255,255,0.08);flex-shrink:0;margin:0 3px"></span>
           <div id="savedPrompts" style="display:flex;gap:4px;align-items:center;overflow-x:auto;flex-wrap:nowrap"></div>
+          <span style="width:1px;height:16px;background:rgba(255,255,255,0.08);flex-shrink:0;margin:0 3px"></span>
+          <button class="btn btn-sm" onclick="exportPrompts()" title="导出所有自定义提示词" style="flex-shrink:0;font-size:0.68rem">📤</button>
+          <button class="btn btn-sm" onclick="importPrompts()" title="导入提示词" style="flex-shrink:0;font-size:0.68rem">📥</button>
         </div>
+      </div>
+      <div id="hiddenRulesRow" style="display:none;flex-direction:column;gap:4px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;font-size:0.73rem;color:var(--text-secondary)">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer">
+            <input type="checkbox" id="hiddenRulesEnabled" checked onchange="var ta=$('hiddenRulesText');if(ta)ta.disabled=!this.checked" style="accent-color:var(--accent)">
+            启用
+          </label>
+          <span style="color:var(--text-muted)">基础翻译策略（判断1-3）。润色模式的糅合对比规则由后端自动追加</span>
+        </div>
+        <textarea id="hiddenRulesText" class="prompt-area visible" placeholder="翻译策略..." style="width:100%;min-height:50px;resize:vertical;margin-bottom:0;font-size:0.72rem"></textarea>
       </div>
       <div class="progress-wrap">
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
@@ -256,9 +270,28 @@
           <button class="btn" id="tagBtnClear" disabled onclick="tagClearAll()">清除全部</button>
           <button class="btn" id="tagBtnExport" disabled onclick="tagExport()">导出结果</button>
           <button class="btn" id="tagBtnExportSep" onclick="tagExportSeparate()">按类目分别导出</button>
+          <button class="btn btn-primary" id="tagBtnImport" disabled onclick="tagSendToTranslate()">导入翻译</button>
           <span style="font-size:0.78rem;color:var(--text-muted);margin-left:4px">并发</span>
           <input type="number" id="tagConcurrency" value="5" min="1" max="10" class="param-input" style="width:42px">
           <span id="tagRuntimeDisplay" style="display:none;font-size:0.72rem;color:var(--accent);margin-left:6px;font-variant-numeric:tabular-nums"></span>
+          <span class="prompt-toggle" id="tagStrategyToggle" onclick="tagToggleStrategy()" style="margin-left:8px">分类策略 ▼</span>
+        </div>
+        <div id="tagStrategyRow" style="display:none;flex-direction:column;gap:6px;margin-top:6px;margin-bottom:4px">
+          <div style="font-size:0.72rem;color:var(--text-muted);line-height:1.5;padding:6px 10px;background:rgba(0,0,0,0.15);border-radius:4px;border-left:3px solid var(--accent)">
+            <div style="font-weight:600;color:var(--text-secondary);margin-bottom:4px">📋 发给 LLM 的完整 prompt 结构：</div>
+            <div><span style="color:var(--accent)">① 角色指令</span>（下方可编辑）</div>
+            <div><span style="color:var(--green)">② 类别列表</span>（从「管理标签」自动生成，不可编辑）</div>
+            <div><span style="color:var(--amber)">③ 输出格式</span>（固定 JSON 格式，不可编辑）</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:0.73rem;color:var(--text-secondary);font-weight:600">① 角色指令</span>
+            <button class="btn btn-sm" onclick="resetTagStrategy()" title="恢复默认" style="padding:2px 6px;font-size:0.85rem">↻</button>
+            <div id="tagStrategyPresets" style="display:flex;gap:4px;align-items:center"></div>
+          </div>
+          <textarea id="tagStrategyText" class="prompt-area visible" placeholder="角色指令..." style="width:100%;min-height:40px;resize:vertical;margin-bottom:0;font-size:0.72rem" oninput="saveTagStrategy()"></textarea>
+          <div style="font-size:0.68rem;color:var(--text-muted);line-height:1.4">
+            <span style="color:var(--green)">② 类别列表</span> 和 <span style="color:var(--amber)">③ 输出格式</span> 会在每次分词时自动追加到角色指令之后，无需手动添加。
+          </div>
         </div>
         <div class="tag-progress-wrap">
           <div class="progress-bar"><div class="progress-fill" id="tagProgressFill"></div></div>

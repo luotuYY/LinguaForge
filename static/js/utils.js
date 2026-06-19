@@ -1,7 +1,7 @@
 /**
- * TxtLlmHub — Utility Functions
- * Pure helpers: DOM selectors, HTML escaping, search highlighting, clipboard, sorting.
- * No state dependencies; safe to load first.
+ * TxtLlmHub — 工具函数
+ * DOM 选择、HTML 转义、搜索高亮、剪贴板、自然排序
+ * 无状态依赖，可最先加载
  */
 
 /** Shorthand DOM selector */
@@ -103,11 +103,13 @@ function clearLog() {
 // ── Custom Confirm Modal (replaces native confirm) ──
 function showConfirm(msg) {
   return new Promise(function (resolve) {
+    window._showConfirmActive = true;
     $('confirmMsg').textContent = msg;
     var modal = $('confirmModal');
     modal.style.display = 'flex';
     function cleanup(result) {
       modal.style.display = 'none';
+      window._showConfirmActive = false;
       document.removeEventListener('keydown', onKey);
       resolve(result);
     }
@@ -169,7 +171,7 @@ function showConfirm(msg) {
     var el = e.target.closest('[title], [data-tooltip]');
     if (!el) { onLeave(); return; }
     if (el.hasAttribute('data-tooltip')) {
-      // Use data-tooltip (no native title race)
+      // 使用 data-tooltip（避免与原生 title 冲突）
       if (currentEl === el) return;
       onLeave();
       currentEl = el;
