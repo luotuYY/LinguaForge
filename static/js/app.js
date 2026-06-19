@@ -101,10 +101,16 @@ async function translateOne(index, e) {
   var btn = e.target;
   btn.disabled = true;
   btn.textContent = '...';
-  enterTranslatingState();
+  state.translating = true;
+  state.abort = false;
   await translateOneCore(index);
-  exitTranslatingState();
+  state.translating = false;
+  state.abort = false;
+  btn.disabled = false;
+  btn.textContent = '译';
   $('btnExport').disabled = !state.lines.some(function (l) { return l.new_translation; });
+  updateTranslateAllButton();
+  updateRetryButton();
 }
 
 // ── 批量翻译：勾选条目 ──
@@ -186,7 +192,8 @@ async function translateAll() {
 async function retryFailed() {
   var failed = state.lines.filter(function (l) { return l.error; });
   if (failed.length === 0) { showToast('没有失败的行'); return; }
-  if (state.translating) {
+  var wasTranslating = state.translating;
+  if (wasTranslating) {
     state.abort = true;
     log('正在停止当前任务，为重试失败行让路...');
     while (state.translating) { await new Promise(function(r) { setTimeout(r, 50); }); }
@@ -209,19 +216,24 @@ async function retryFailed() {
   $('btnExport').disabled = (ok === 0);
   log('重试结束: 成功' + ok + '行' + (err ? ', 失败' + err + '行' : ''));
   if (!wasAborted) showToast('重试完成：成功' + ok + '行' + (err ? '，失败' + err + '行' : ''));
+  if (wasTranslating && !wasAborted) {
+    log('继续未完成的任务...');
+    translateAll();
+  }
 }
 
 async function retrySelected() {
   var checked = getCheckedRows();
   if (checked.length === 0) { showToast('未选中任何条目'); return; }
-  if (state.translating) {
+  var wasTranslating = state.translating;
+  if (wasTranslating) {
     state.abort = true;
     log('正在暂停当前任务，为重译选中条目让路...');
     while (state.translating) { await new Promise(function(r) { setTimeout(r, 50); }); }
     log('当前任务已暂停，开始重译选中条目');
   }
   for (var ci = 0; ci < checked.length; ci++) { checked[ci].error = ''; checked[ci].new_translation = ''; checked[ci].keepOld = false; }
-  if (!state.translating) clearLog();
+  if (!wasTranslating) clearLog();
   enterTranslatingState();
   state.translateStarted = true;
   $('btnRetryFailed').disabled = true;
@@ -237,6 +249,10 @@ async function retrySelected() {
   $('btnExport').disabled = (ok === 0);
   log('重译结束: 成功' + ok + '行' + (err ? ', 失败' + err + '行' : ''));
   if (!wasAborted) showToast('重译完成：成功' + ok + '行' + (err ? '，失败' + err + '行' : ''));
+  if (wasTranslating && !wasAborted) {
+    log('继续未完成的任务...');
+    translateAll();
+  }
 }
 
 function clearAllTranslations() {
@@ -278,7 +294,7 @@ function stopTranslate() {
   state.abort = true;
   $('btnStop').disabled = true;
   $('btnStop').textContent = '停止中...';
-  showToast('正在停止，当前块完成后将不再发起新请求');
+  showToast('正在停止，当前块完成后不再发起新请求');
 }
 
 
@@ -299,11 +315,22 @@ async function retryOne(index, e) {
   line.keepOld = false;
   line.error = '';
   line.new_translation = '';
-  enterTranslatingState();
+  state.translating = true;
+  state.abort = false;
   await translateOneCore(index);
-  exitTranslatingState();
+  state.translating = false;
+  state.abort = false;
+  btn.disabled = false;
+  btn.textContent = '重译';
   $('btnExport').disabled = !state.lines.some(function (l) { return l.new_translation; });
+  updateTranslateAllButton();
+  updateRetryButton();
   log('[' + (index + 1) + '] 单行重译完成');
+  // 如果之前有任务在跑，重译完后继续
+  if (wasTranslating) {
+    log('继续未完成的任务...');
+    translateAll();
+  }
 }
 
 // ── 复制/删除选中行 ──
@@ -389,7 +416,7 @@ function editTranslation(index, evt) {
   ta.addEventListener('blur', function () { commitEditTA(ta, index); });
   ta.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEditTA(ta, index); }
-    if (e.key === 'Escape') { line.new_translation = orig; ta.remove(); _compareDirty = false; renderCompare(); }
+    if (e.key === 'Escape') { line.new_translation = orig; ta.remove(); _compareDirty = false; updateCompareRow(index); updatePreviewLine(index); }
   });
   ta.addEventListener('input', function () { autoResizeTA(ta); });
 }
@@ -398,11 +425,10 @@ function commitEditTA(ta, index) {
   var val = ta.value.trim();
   var line = state.lines[index];
   if (line && val) { line.new_translation = val; line.error = ''; log('[' + (index + 1) + '] 手动编辑'); }
-  // 先从 DOM 移除 textarea，再触发 renderCompare（否则 dirty 检查会跳过）
   ta.remove();
   _compareDirty = false;
-  renderCompare();
-  renderPreview();
+  updateCompareRow(index);
+  updatePreviewLine(index);
 }
 
 function autoResizeTA(ta) {
@@ -412,23 +438,25 @@ function autoResizeTA(ta) {
 
 // ── 清除/保留译文 ──
 function clearNewWithoutOld() {
-  var count = 0;
+  var affected = [];
   for (var i = 0; i < state.lines.length; i++) {
     var l = state.lines[i];
     if (!l.translation && l.new_translation && l.new_translation !== ' ') {
       l.new_translation = ' ';
       l.error = '';
       l.keepOld = false;
-      count++;
+      affected.push(i);
     }
   }
-  if (count === 0) { showToast('没有可清空的词条'); return; }
-  renderCompare();
-  renderPreview();
+  if (affected.length === 0) { showToast('没有可清空的词条'); return; }
+  for (var j = 0; j < affected.length; j++) {
+    updateCompareRow(affected[j]);
+    updatePreviewLine(affected[j]);
+  }
   updateRetryButton();
   $('btnExport').disabled = false;
-  log('清空 ' + count + ' 条无旧译文的词条');
-  showToast('已清空 ' + count + ' 条');
+  log('清空 ' + affected.length + ' 条无旧译文的词条');
+  showToast('已清空 ' + affected.length + ' 条');
 }
 
 function keepOld(index) {
@@ -439,8 +467,8 @@ function keepOld(index) {
   line.new_translation = line.translation;
   line.error = '';
   log('[' + (index + 1) + '] 保留原译文');
-  renderCompare();
-  renderPreview();
+  updateCompareRow(index);
+  updatePreviewLine(index);
   updateRetryButton();
   $('btnExport').disabled = false;
 }

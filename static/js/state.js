@@ -55,7 +55,7 @@ var PRESET_PROMPTS = {
     {
       id: '__preset_ui_direct__',
       name: 'UI / Mod（术语）',
-      text: '你是一个专业游戏中文本地化专家，专精UI、菜单、控件、Mod说明翻译。\n规则：\n1. 术语绝对准确，必要时保留英文原词。\n2. 极度简洁，译文不超过原文长度。\n3. 完整保留占位符（{0}、%s）、快捷键（&键）、换行和特殊符号。\n只输出译文，不要额外解释。',
+      text: '你是一个专业游戏中文本地化专家，专精UI、菜单、控件、Mod说明翻译。\n规则：\n1. 游戏术语必须翻译为中文（Attack Power→攻击力，Inventory→物品栏），译名以业界通行中文为准。\n2. 极度简洁，译文不超过原文长度。\n3. 仅保留占位符（{0}、%s）、快捷键（&键）、换行和特殊符号原样不动。\n只输出译文，不要额外解释。',
       locked: true
     },
     {
@@ -69,8 +69,8 @@ var PRESET_PROMPTS = {
     {
       id: '__preset_ui_polish__',
       name: 'UI / Mod（术语）',
-      text: '你是一个专业游戏UI翻译初稿专家。请对以下文本逐句直译。\n规则：\n- 术语和占位符保留英文，不做翻译。\n- 结构对齐原文，即使生硬也保留原语序。\n- 不添加任何修饰或解释。\n只输出译文，不要额外解释。',
-      step2: '你是一个游戏UI本地化校对专家。\n你将收到【直译新译文】和【旧译文】。\n处理规则：\n- 术语以直译为准，旧译文有误则修正。\n- 极致精简，长度不超过原文。\n- 可微调使其通顺，但绝不意译。\n只输出最终译文。',
+      text: '你是一个专业游戏UI翻译初稿专家。请对以下文本逐句直译。\n规则：\n- 游戏术语必须翻译为中文，不得保留英文。\n- 仅保留占位符（{0}、%s）、快捷键（&键）和特殊符号原样不动。\n- 结构对齐原文，即使生硬也保留原语序。\n- 不添加任何修饰或解释。\n只输出译文，不要额外解释。',
+      step2: '你是一个游戏UI本地化校对专家。\n你将收到【直译新译文】和【旧译文】。\n处理规则：\n- 术语以直译新译文为准，旧译文有误则修正。\n- 所有文本必须为中文，不得出现英文术语。\n- 极致精简，长度不超过原文。\n- 可微调使其通顺，但绝不意译。\n只输出最终译文。',
       locked: true
     },
     {
@@ -84,11 +84,11 @@ var PRESET_PROMPTS = {
 };
 
 // ── Default Prompts (HYBRID — system defaults for each mode) ──
-var DIRECT_DEFAULT = '你是一个游戏本地化翻译专家。请将以下文本翻译为中文。\n处理规则：\n- 含日文假名 → 直接翻译，严禁臆测或解读为代号。\n- 纯代码键名(del/get/set等) → 保持原文不变。\n- 装备名/UI标签/菜单项 → 简洁直译，不加修饰，长度不超过原文。\n- 对话/叙事/台词 → 自然流畅，贴合角色语气，允许意译。\n- 混合文本 → 术语优先，口语化串联。\n保留原文全部格式。只输出译文，不要额外解释。';
+var DIRECT_DEFAULT = '你是一个游戏本地化翻译专家。请将以下文本翻译为中文。\n处理规则：\n- 游戏术语必须翻译为中文（Attack Power→攻击力，Inventory→物品栏），译名以业界通行中文为准。\n- 含日文假名 → 直接翻译，严禁臆测或解读为代号。\n- 纯代码键名(del/get/set等) → 保持原文不变。\n- 占位符（{0}、%s）、快捷键（&键）、换行和特殊符号 → 原样保留。\n- 对话/叙事/台词 → 自然流畅，贴合角色语气，允许意译。\n- 混合文本 → 术语优先，口语化串联。\n保留原文全部格式。只输出译文，不要额外解释。';
 
-var POLISH_DIRECT_DEFAULT = '你是一个专业游戏翻译初稿专家。请对以下文本逐句直译，同时为每句打上类型标签。\n判断标准：\n- [UI]：按钮、菜单、系统提示、Mod说明、属性列表、含占位符/快捷键的文本。\n- [DIALOGUE]：角色对白、剧情叙述、含情绪和语气的文本。\n翻译要求：\n- [UI]句：结构对齐的忠实直译，术语和占位符保留英文。\n- [DIALOGUE]句：意思准确的通顺中文，允许微调语序。\n输出格式（必须严格带标签）：\n[标签] 中文底稿\n只输出带标签的译文，不要额外解释。';
+var POLISH_DIRECT_DEFAULT = '你是一个专业游戏翻译初稿专家。请对以下文本逐句直译，同时为每句打上类型标签。\n判断标准：\n- [UI]：按钮、菜单、系统提示、Mod说明、属性列表、含占位符/快捷键的文本。\n- [DIALOGUE]：角色对白、剧情叙述、含情绪和语气的文本。\n翻译要求：\n- [UI]句：结构对齐的忠实直译，术语必须翻译为中文，仅保留占位符和特殊符号原样不动。\n- [DIALOGUE]句：意思准确的通顺中文，允许微调语序。\n输出格式（必须严格带标签）：\n[标签] 中文底稿\n只输出带标签的译文，不要额外解释。';
 
-var POLISH_STEP2_DEFAULT = '你是一个资深游戏本地化校对专家。你将收到带标签的【直译新译文】和【旧译文】。请根据标签分别处理：\n\n【UI 模式】\n- 术语以直译新译文为准，旧译文有误则修正。\n- 极致精简，长度不超过原文。\n- 可微调使其通顺，但绝不意译。\n\n【DIALOGUE 模式】\n- 目标是写出地道的中文对白，完全摆脱翻译腔。\n- 继承直译的准确语义和情绪，但可彻底重写结构。\n- 吸收旧译文的口语化优点，进行创造性润色。\n\n输出时去掉所有标签，只输出最终的纯译文文本。';
+var POLISH_STEP2_DEFAULT = '你是一个资深游戏本地化校对专家。你将收到带标签的【直译新译文】和【旧译文】。请根据标签分别处理：\n\n【UI 模式】\n- 所有文本必须为中文，不得出现英文术语。\n- 术语以直译新译文为准，旧译文有误则修正。\n- 极致精简，长度不超过原文。\n- 可微调使其通顺，但绝不意译。\n\n【DIALOGUE 模式】\n- 目标是写出地道的中文对白，完全摆脱翻译腔。\n- 继承直译的准确语义和情绪，但可彻底重写结构。\n- 吸收旧译文的口语化优点，进行创造性润色。\n\n输出时去掉所有标签，只输出最终的纯译文文本。';
 
 // ── Polish Step2 prompt storage ──
 function getPolishStep2Prompt() {
@@ -727,14 +727,10 @@ function updateManualBtn() {
 function updateRetryButton() {
   var failed = state.lines.filter(function (l) { return l.error; }).length;
   $('btnRetryFailed').disabled = (failed === 0);
-  var checked = state.compareChecked.size;
-  var rsBtn = $('btnRetrySelected');
-  if (rsBtn) rsBtn.disabled = (checked === 0);
+  // btnRetrySelected 常亮，由 retrySelected() 自行处理无选中
 }
 function updateExportCheckedButton() {
-  var btn = $('btnExportChecked');
-  if (!btn) return;
-  btn.disabled = (state.compareChecked.size === 0);
+  // btnExportChecked 常亮，由 exportCheckedRows() 自行处理无选中
 }
 
 // ── Init: restore saved mode, then load defaults ──

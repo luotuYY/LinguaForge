@@ -194,6 +194,8 @@ async function translateOneCore(index) {
     line.error = e.message;
     log('[' + (line.index + 1) + '] 错误: ' + e.message, 'err');
   }
+  updateCompareRow(index);
+  updatePreviewLine(index);
 }
 
 // ── 翻译状态控制 ──
@@ -241,11 +243,9 @@ function exitTranslatingState() {
   $('btnStop').textContent = '停止';
   updateRetryButton();
   updatePreviewSelectAllVisibility();
-  renderPreview();
-  renderCompare();
 }
 
-// ── 批量流式翻译（一次请求，NDJSON 逐条返回） ──
+// ── 批量流式翻译（分块发送，每块条数 = 并发数，块间可停止） ──
 
 async function translateBatchItems(items) {
   var total = items.length;
@@ -255,84 +255,105 @@ async function translateBatchItems(items) {
   var mode = state.translateMode;
   var apiUrl = mode === 'polish' ? '/api/translate-batch-polish' : '/api/translate-batch';
 
+  // 按并发数分块
+  var chunks = [];
+  for (var ci = 0; ci < items.length; ci += concurrency) {
+    chunks.push(items.slice(ci, ci + concurrency));
+  }
+  var totalChunks = chunks.length;
+
   setBatchUpdating(true);
   var done = 0, errors = 0;
-  $('progressText').textContent = '进度: 0/' + total + ' · 并发' + concurrency;
-  log('开始翻译，共 ' + total + ' 行，并发 ' + concurrency);
+  $('progressText').textContent = '进度: 0/' + total + ' · 并发' + concurrency + ' · 块0/' + totalChunks;
+  log('开始' + (mode === 'polish' ? '润色' : '翻译') + '，共 ' + total + ' 行，并发 ' + concurrency + '，分 ' + totalChunks + ' 块');
 
   try {
-    var batchBody = Object.assign({ items: items, concurrency: concurrency }, params, apiConfig);
-    var r = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(batchBody)
-    });
-    if (!r.ok) {
-      var errText = '';
-      try { var ed = await r.json(); errText = ed.error || ''; } catch (ex) { errText = r.statusText; }
-      for (var ci = 0; ci < items.length; ci++) {
-        items[ci].error = errText || '翻译失败';
-        items[ci].new_translation = '';
+    for (var chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
+      // 块间检查停止信号
+      if (state.abort) {
+        log('用户停止，已完成 ' + done + '/' + total + ' 行（' + chunkIdx + '/' + totalChunks + ' 块）');
+        break;
       }
-      errors = items.length;
-      log('请求失败: ' + (errText || '请求错误'), 'err');
-    } else {
-      // 流式读取 NDJSON（后端逐条返回，前端逐条渲染）
-      var reader = r.body.getReader();
-      var decoder = new TextDecoder();
-      var buf = '';
-      while (true) {
-        if (state.abort) {
-          reader.cancel();
-          break;
+
+      var chunk = chunks[chunkIdx];
+      logChunk(chunkIdx + 1, totalChunks, chunk.length, total, mode);
+
+      var batchBody = Object.assign({ items: chunk, concurrency: concurrency }, params, apiConfig);
+      var r = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(batchBody)
+      });
+
+      if (!r.ok) {
+        var errText = '';
+        try { var ed = await r.json(); errText = ed.error || ''; } catch (ex) { errText = r.statusText; }
+        for (var ci2 = 0; ci2 < chunk.length; ci2++) {
+          chunk[ci2].error = errText || '翻译失败';
+          chunk[ci2].new_translation = '';
         }
-        var streamResult = await reader.read();
-        if (streamResult.done) break;
-        buf += decoder.decode(streamResult.value, { stream: true });
-        var lines = buf.split('\n');
-        buf = lines.pop();
-        for (var li = 0; li < lines.length; li++) {
-          var line = lines[li].trim();
-          if (!line) continue;
-          try {
-            var res = JSON.parse(line);
-            var pos = res.index;
-            if (pos >= 0 && pos < items.length) {
-              items[pos].new_translation = res.new_translation;
-              items[pos].error = res.error || '';
-              items[pos].truncated = !!res.truncated;
-              items[pos].warning = res.warning || '';
-              items[pos].degraded = !!res.degraded;
-              if (res.error) errors++;
-              done++;
-              updateCompareRow(items[pos].index);
-            }
-          } catch (parseErr) {}
-        }
-        $('progressFill').style.width = (done / total * 100) + '%';
-        var successCount = done - errors;
-        $('progressText').textContent = '进度: ' + done + '/' + total + ' (成功' + successCount + ', 失败' + errors + ')';
-      }
-      // 处理 buffer 中残留的最后一行
-      if (buf.trim()) {
-        try {
-          var lastRes = JSON.parse(buf.trim());
-          var lastPos = lastRes.index;
-          if (lastPos >= 0 && lastPos < items.length) {
-            items[lastPos].new_translation = lastRes.new_translation;
-            items[lastPos].error = lastRes.error || '';
-            items[lastPos].truncated = !!lastRes.truncated;
-            items[lastPos].warning = lastRes.warning || '';
-            items[lastPos].degraded = !!lastRes.degraded;
-            if (lastRes.error) errors++;
-            done++;
-            updateCompareRow(items[lastPos].index);
+        errors += chunk.length;
+        done += chunk.length;
+        log('块 ' + (chunkIdx + 1) + ' 失败: ' + (errText || '请求错误'), 'err');
+      } else {
+        // 流式读取 NDJSON（后端逐条返回，前端逐条渲染）
+        var reader = r.body.getReader();
+        var decoder = new TextDecoder();
+        var buf = '';
+        while (true) {
+          var streamResult = await reader.read();
+          if (streamResult.done) break;
+          buf += decoder.decode(streamResult.value, { stream: true });
+          var lines = buf.split('\n');
+          buf = lines.pop();
+          for (var li = 0; li < lines.length; li++) {
+            var line = lines[li].trim();
+            if (!line) continue;
+            try {
+              var res = JSON.parse(line);
+              var pos = res.index;
+              if (pos >= 0 && pos < chunk.length) {
+                chunk[pos].new_translation = res.new_translation;
+                chunk[pos].error = res.error || '';
+                chunk[pos].truncated = !!res.truncated;
+                chunk[pos].warning = res.warning || '';
+                chunk[pos].degraded = !!res.degraded;
+                if (res.error) errors++;
+                done++;
+                updateCompareRow(chunk[pos].index);
+              }
+            } catch (parseErr) {}
           }
-        } catch (e2) {}
+          $('progressFill').style.width = (done / total * 100) + '%';
+          var successCount = done - errors;
+          $('progressText').textContent = '进度: ' + done + '/' + total + ' (成功' + successCount + ', 失败' + errors + ') · 块' + (chunkIdx + 1) + '/' + totalChunks;
+        }
+        // 处理 buffer 中残留的最后一行
+        if (buf.trim()) {
+          try {
+            var lastRes = JSON.parse(buf.trim());
+            var lastPos = lastRes.index;
+            if (lastPos >= 0 && lastPos < chunk.length) {
+              chunk[lastPos].new_translation = lastRes.new_translation;
+              chunk[lastPos].error = lastRes.error || '';
+              chunk[lastPos].truncated = !!lastRes.truncated;
+              chunk[lastPos].warning = lastRes.warning || '';
+              chunk[lastPos].degraded = !!lastRes.degraded;
+              if (lastRes.error) errors++;
+              done++;
+              updateCompareRow(chunk[lastPos].index);
+            }
+          } catch (e2) {}
+        }
       }
+
+      // 更新进度
+      $('progressFill').style.width = (done / total * 100) + '%';
+      var successCount2 = done - errors;
+      $('progressText').textContent = '进度: ' + done + '/' + total + ' (成功' + successCount2 + ', 失败' + errors + ') · 块' + (chunkIdx + 1) + '/' + totalChunks;
     }
   } catch (e) {
-    for (var ci2 = 0; ci2 < items.length; ci2++) { if (!items[ci2].new_translation && !items[ci2].error) items[ci2].error = e.message; }
+    for (var ci3 = 0; ci3 < items.length; ci3++) { if (!items[ci3].new_translation && !items[ci3].error) items[ci3].error = e.message; }
     errors += (items.length - done);
     log('异常: ' + e.message, 'err');
   }
