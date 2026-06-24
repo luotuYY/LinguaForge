@@ -1672,28 +1672,7 @@ function tagAdminImport() {
 // ── 文件导入 ──
 function handleTagFiles(e) {
   if (e && e.target !== e.currentTarget) return;
-  if (window.showDirectoryPicker) {
-    pickTagDir().catch(function(err) {
-      if (err.name !== 'AbortError' && err.name !== 'SecurityError') {
-        document.getElementById('tagFileInput').click();
-      }
-    });
-  } else {
-    document.getElementById('tagFileInput').click();
-  }
-  async function pickTagDir() {
-    var dirHandle = await window.showDirectoryPicker();
-    var files = [];
-    for await (var entry of dirHandle.values()) {
-      if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.txt')) {
-        var file = await entry.getFile();
-        file._relativePath = entry.name;
-        files.push(file);
-      }
-    }
-    if (files.length > 0) tagProcessFiles(files);
-    else showToast('未找到 .txt 文件');
-  }
+  document.getElementById('tagFileInput').click();
 }
 
 
