@@ -762,8 +762,8 @@ async function _tagRetagOnDrop(line, targetL1) {
   var cat = schema[targetL1];
   if (!cat || !cat.subs.length) return;
 
-  var shortText = (line.original || '').substring(0, 30);
-  tagLog('\u2192 \u91cd\u65b0\u5206\u8bcd "' + shortText + '" \u2192 ' + targetL1 + '/' + cat.subs.join(','));
+  var fullText = line.original || '';
+  tagLog('\u2192 \u91cd\u65b0\u5206\u8bcd "' + fullText + '" \u2192 ' + targetL1 + '/' + cat.subs.join(','));
 
   // Mark as re-tagging (visual feedback)
   line._retagging = true;
@@ -782,7 +782,7 @@ async function _tagRetagOnDrop(line, targetL1) {
   try {
     var apiConfig = tagGetApiConfig();
     var body = Object.assign({
-      items: [{ original: line.original }],
+      items: [{ original: line.original, translation: line.translation || line.original }],
       concurrency: 1,
       system_prompt: prompt,
     }, apiConfig);
@@ -794,7 +794,7 @@ async function _tagRetagOnDrop(line, targetL1) {
     });
 
     if (!r.ok) {
-      tagLog('\u2717 \u91cd\u5206\u8bcd\u5931\u8d25: HTTP ' + r.status + ' "' + shortText + '"', 'err');
+      tagLog('\u2717 \u91cd\u5206\u8bcd\u5931\u8d25: HTTP ' + r.status + ' "' + fullText + '"', 'err');
     } else {
       var text = await r.text();
       tagLog('  重分词 API 返回: ' + text.substring(0, 200));
@@ -804,7 +804,7 @@ async function _tagRetagOnDrop(line, targetL1) {
         try {
           var res = JSON.parse(t);
           if (res.error) {
-            tagLog('\u2717 \u91cd\u5206\u8bcd\u5931\u8d25 "' + shortText + '": ' + res.error, 'err');
+            tagLog('\u2717 \u91cd\u5206\u8bcd\u5931\u8d25 "' + fullText + '": ' + res.error, 'err');
             break;
           }
           var l2 = (res.tag_l2 || '').trim();
@@ -815,17 +815,17 @@ async function _tagRetagOnDrop(line, targetL1) {
               line.tag_l2 = l2;
               line.confidence = res.confidence || 0;
               ok = true;
-              tagLog('\u2713 \u91cd\u5206\u8bcd\u6210\u529f "' + shortText + '" \u2192 ' + targetL1 + '/' + l2 + ' (' + Math.round((res.confidence||0)*100) + '%)', 'ok');
+              tagLog('\u2713 \u91cd\u5206\u8bcd\u6210\u529f "' + fullText + '" \u2192 ' + targetL1 + '/' + l2 + ' (' + Math.round((res.confidence||0)*100) + '%)', 'ok');
               break;
             }
           }
         } catch (e) {}
       }
-      if (!ok && res && res.tag_l2) tagLog('\u26a0 \u91cd\u5206\u8bcd\u672a\u5339\u914d\u5b50\u7c7b "' + shortText + '": \u8fd4\u56de="' + (res.tag_l2||'').trim() + '", \u671f\u671b=' + cat.subs.join('|') + '\u2192\u4fdd\u6301\u9ed8\u8ba4 ' + targetL1 + '/' + line.tag_l2);
-      else if (!ok) tagLog('\u26a0 \u91cd\u5206\u8bcd\u65e0\u6709\u6548\u5b50\u7c7b\u8f93\u51fa "' + shortText + '"\u2192\u4fdd\u6301\u9ed8\u8ba4 ' + targetL1 + '/' + line.tag_l2);
+      if (!ok && res && res.tag_l2) tagLog('\u26a0 \u91cd\u5206\u8bcd\u672a\u5339\u914d\u5b50\u7c7b "' + fullText + '": \u8fd4\u56de="' + (res.tag_l2||'').trim() + '", \u671f\u671b=' + cat.subs.join('|') + '\u2192\u4fdd\u6301\u9ed8\u8ba4 ' + targetL1 + '/' + line.tag_l2);
+      else if (!ok) tagLog('\u26a0 \u91cd\u5206\u8bcd\u65e0\u6709\u6548\u5b50\u7c7b\u8f93\u51fa "' + fullText + '"\u2192\u4fdd\u6301\u9ed8\u8ba4 ' + targetL1 + '/' + line.tag_l2);
     }
   } catch (e) {
-    tagLog('\u2717 \u91cd\u5206\u8bcd\u5f02\u5e38 "' + shortText + '": ' + (e.message || e), 'err');
+    tagLog('\u2717 \u91cd\u5206\u8bcd\u5f02\u5e38 "' + fullText + '": ' + (e.message || e), 'err');
   }
   line._retagging = false;
   tagUpdateOneCard(line);
