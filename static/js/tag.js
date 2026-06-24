@@ -1078,12 +1078,12 @@ function tagOpenAdmin() {
             '<input type="checkbox" class="tag-admin-enabled"' + (cat.enabled !== false ? ' checked' : '') +
               ' onchange="this.closest(\'.tag-admin-group\').classList.toggle(\'tag-admin-disabled\', !this.checked)">' +
           '</label>' +
-          '<input class="tag-admin-icon" value="' + escHtml(cat.icon || '📌') + '" style="width:30px;text-align:center">' +
+          '<input class="tag-admin-icon" value="' + escHtml(cat.icon || '📌') + '" onchange="_autoSave()" style="width:30px;text-align:center">' +
           '<input class="tag-admin-name" value="' + escHtml(l1) + '" style="flex:1"' +
             ' ondblclick="this.readOnly=false;this.focus();this.select()"' +
             ' onblur="this.readOnly=true"' +
             ' readonly">' +
-          '<input class="tag-admin-color" type="color" value="' + (cat.color || '#888') + '" title="颜色">' +
+          '<input class="tag-admin-color" type="color" value="' + (cat.color || '#888') + '" onchange="_autoSave()" title="颜色">' +
           '<button class="btn btn-sm" onclick="tagAdminAddSub(this)">+子项</button>' +
           '<button class="btn btn-sm tag-admin-del-btn" onclick="tagAdminRemoveGroup(this)">🗑</button>' +
         '</div>' +
@@ -1094,7 +1094,7 @@ function tagOpenAdmin() {
         ' ondragend="tagAdminSubDragEnd(event, this)">' +
         '<input class="tag-admin-sub" value="' + escHtml(sub) + '"' +
           ' ondblclick="this.readOnly=false;this.focus();this.select()"' +
-          ' onblur="this.readOnly=true"' +
+          ' onblur="this.readOnly=true;_autoSave()"' +
           ' readonly">' +
         '<span class="tag-admin-sub-del" onclick="tagAdminRemoveSub(this)" title="移回二级池">&times;</span>' +
       '</span>';
@@ -1148,7 +1148,7 @@ function tagAdminAddGroup() {
       '<input type="checkbox" class="tag-admin-enabled" checked onchange="this.closest(\'.tag-admin-group\').classList.toggle(\'tag-admin-disabled\', !this.checked)">' +
     '</label>' +
     '<input class="tag-admin-icon" value="📌" style="width:30px;text-align:center">' +
-    '<input class="tag-admin-name" value="新类目" style="flex:1">' +
+    '<input class="tag-admin-name" value="新类目" ondblclick="this.readOnly=false;this.focus();this.select()" onblur="this.readOnly=true" readonly style="flex:1">' +
     '<input class="tag-admin-color" type="color" value="#888888">' +
     '<button class="btn btn-sm" onclick="tagAdminAddSub(this)">+子项</button>' +
     '<button class="btn btn-sm tag-admin-del-btn" onclick="tagAdminRemoveGroup(this)">🗑</button>' +
@@ -1172,6 +1172,7 @@ function tagAdminRemoveGroup(btn) {
   });
   saveSubPool(pool);
   group.remove();
+  _autoSave();
 }
 
 
@@ -1180,7 +1181,7 @@ function tagAdminRemoveSub(el) {
   var input = el.parentElement.querySelector('.tag-admin-sub');
   var name = (input.value || input.defaultValue || '').trim();
   el.parentElement.remove();
-  if (name) { var pool = getSubPool(); if (pool.indexOf(name) === -1) { pool.push(name); saveSubPool(pool); } _refreshPool(); }
+  if (name) { var pool = getSubPool(); if (pool.indexOf(name) === -1) { pool.push(name); saveSubPool(pool); } _refreshPool(); _autoSave(); }
 }
 
 // ── 池子拖拽事件 ──
@@ -1234,6 +1235,7 @@ function tagAdminDrop(e, group) {
   var subsDiv = group.querySelector('.tag-admin-subs');
   var temp = document.createElement('div'); temp.innerHTML = subHtml; subsDiv.appendChild(temp.firstElementChild);
   _refreshPool();
+  _autoSave();
 }
 
 // ── 池子双击编辑 ──
@@ -1252,6 +1254,7 @@ function tagAdminPoolEdit(e, el) {
       if (idx !== -1) { pool[idx] = newName; saveSubPool(pool); }
     }
     var span = document.createElement('span'); span.className = 'tag-admin-pool-text'; span.textContent = newName || oldName; input.replaceWith(span);
+    _autoSave();
   }
   input.addEventListener('blur', commit);
   input.addEventListener('keydown', function(ev) {
@@ -1268,6 +1271,7 @@ function tagAdminDeletePoolItem(e, el) {
   var pool = getSubPool(); var idx = pool.indexOf(name); if (idx !== -1) { pool.splice(idx, 1); saveSubPool(pool); }
   chip.remove();
   if (document.querySelectorAll('.tag-admin-pool-chip').length === 0) _refreshPool();
+  _autoSave();
 }
 
 // ── 添加新条目到池子 ──
@@ -1278,7 +1282,7 @@ function tagAdminAddToPool() {
   var schema = getTagSchema(); var assigned = false;
   Object.keys(schema).forEach(function(l1) { if ((schema[l1].subs || []).indexOf(name) !== -1) assigned = true; });
   if (assigned) { showToast('该名称已在分类中使用'); return; }
-  pool.push(name); saveSubPool(pool); _refreshPool();
+  pool.push(name); saveSubPool(pool); _refreshPool(); _autoSave();
 }
 
 // ── 左侧子项拖拽 ──
@@ -1309,6 +1313,7 @@ function tagAdminPoolDrop(e) {
   var pool = getSubPool();
   if (pool.indexOf(name) === -1) { pool.push(name); saveSubPool(pool); }
   _refreshPool();
+  _autoSave();
 }
 
 // ── 刷新右侧池子 DOM ──
@@ -1333,9 +1338,8 @@ function _refreshPool() {
   container.innerHTML = html;
 }
 
-// ── 保存逻辑 ──
-function _adminSave() {
-  var modal = document.getElementById('tagAdminModal');
+// ── 自动保存(静默, 不关闭弹窗) ──
+function _autoSave() {
   var newSchema = {};
   var groups = document.querySelectorAll('.tag-admin-group');
   groups.forEach(function(group) {
@@ -1348,10 +1352,28 @@ function _adminSave() {
     group.querySelectorAll('.tag-admin-sub').forEach(function(subInput) { var val = (subInput.value || subInput.defaultValue || '').trim(); if (val) subs.push(val); });
     if (l1 && subs.length > 0) { newSchema[l1] = { color: colorVal, icon: iconVal, subs: subs, enabled: enabledVal }; }
   });
-  if (Object.keys(newSchema).length === 0) { showToast('至少保留一个一级类目'); return; }
+  if (Object.keys(newSchema).length === 0) return;
   var poolChips = document.querySelectorAll('.tag-admin-pool-chip'); var newPool = [];
   poolChips.forEach(function(chip) { var txt = chip.querySelector('.tag-admin-pool-text'); if (txt) newPool.push(txt.textContent.trim()); });
   saveSubPool(newPool); saveTagSchema(newSchema);
+  tagRenderColumns(); tagRenderPreview(); tagRenderCatPanel(); tagBtnState();
+}
+
+// ── 保存逻辑 ──
+function _adminSave() {
+  var modal = document.getElementById('tagAdminModal');
+  var groups = document.querySelectorAll('.tag-admin-group');
+  // Check before auto-save (avoids toast on every silent save)
+  var hasValid = false;
+  groups.forEach(function(group) {
+    var nameInput = group.querySelector('.tag-admin-name');
+    var l1 = nameInput ? (nameInput.value || nameInput.defaultValue || '').trim() : '';
+    var subs = [];
+    group.querySelectorAll('.tag-admin-sub').forEach(function(s) { var val = (s.value || s.defaultValue || '').trim(); if (val) subs.push(val); });
+    if (l1 && subs.length > 0) hasValid = true;
+  });
+  if (!hasValid) { showToast('至少保留一个一级类目'); return; }
+  _autoSave();
   modal.style.display = 'none';
   tagRenderColumns(); tagRenderPreview(); tagRenderCatPanel(); tagBtnState();
   showToast('标签体系已更新');
