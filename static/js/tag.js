@@ -1454,6 +1454,32 @@ function tagAdminImport() {
 }
 
 // ── 初始化(由 switchPage 懒调用,只执行一次) ──
+// ── 文件导入 ──
+function handleTagFiles() {
+  if (window.showDirectoryPicker) {
+    pickTagDir().catch(function(e) {
+      if (e.name !== 'AbortError' && e.name !== 'SecurityError') {
+        document.getElementById('tagFileInput').click();
+      }
+    });
+  } else {
+    document.getElementById('tagFileInput').click();
+  }
+  async function pickTagDir() {
+    var dirHandle = await window.showDirectoryPicker();
+    var files = [];
+    for await (var entry of dirHandle.values()) {
+      if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.txt')) {
+        var file = await entry.getFile();
+        file._relativePath = entry.name;
+        files.push(file);
+      }
+    }
+    if (files.length > 0) tagProcessFiles(files);
+    else showToast('未找到 .txt 文件');
+  }
+}
+
 function tagInit() {
   // 绑定拖拽上传
   var dz = document.getElementById('tagDropZone');
@@ -1553,5 +1579,7 @@ window.tagAdminSubDragEnd = tagAdminSubDragEnd;
 window.tagAdminPoolDrop = tagAdminPoolDrop;
 
 window._autoSave = _autoSave;
+
+window.handleTagFiles = handleTagFiles;
 
 export {};

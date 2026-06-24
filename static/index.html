@@ -215,11 +215,11 @@
                 <button class="btn btn-sm" onclick="tagClearAll()" style="flex:1">重置</button>
               </div>
             </div>
-            <div class="drop-zone" id="tagDropZone">
+            <div class="drop-zone" id="tagDropZone" onclick="handleTagFiles()">
               <div class="dz-icon">📨</div>
               <div class="dz-text">拖拽 txt 文件到此处，或点击选择</div>
               <div class="dz-hint">格式：原文=译文（每行一条）</div>
-              <input type="file" id="tagFileInput" accept=".txt" multiple>
+              <input type="file" id="tagFileInput" accept=".txt" multiple onchange="tagProcessFiles(this.files)">
             </div>
             <div class="file-info" id="tagFileInfo"></div>
           </div>
