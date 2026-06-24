@@ -1528,4 +1528,6 @@ window.tagAdminSubDragStart = tagAdminSubDragStart;
 window.tagAdminSubDragEnd = tagAdminSubDragEnd;
 window.tagAdminPoolDrop = tagAdminPoolDrop;
 
+window._autoSave = _autoSave;
+
 export {};
