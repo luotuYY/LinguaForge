@@ -1046,7 +1046,11 @@ function tagOpenAdmin() {
             '<div style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);margin-bottom:6px">二级类目池</div>' +
             '<div style="font-size:0.65rem;color:var(--text-muted);margin-bottom:6px">拖入左侧分配 | 双击编辑 | 仅此处可删除</div>' +
             '<div class="tag-admin-pool" id="tagAdminPool" ondragover="event.preventDefault()" ondrop="tagAdminPoolDrop(event)"></div>' +
-            '<button class="btn btn-sm" onclick="tagAdminAddToPool()" style="margin-top:8px;width:100%">+ 添加二级类目</button>' +
+            '<div style="display:flex;gap:4px;margin-top:8px">' +
+            '<input id="tagAdminPoolInput" class="tag-admin-sub" placeholder="输入新二级类目" style="flex:1"' +
+            ' onkeydown="if(event.key==="Enter")tagAdminAddToPool()">' +
+            '<button class="btn btn-sm" onclick="tagAdminAddToPool()">+</button>' +
+          '</div>' +
           '</div>' +
         '</div>' +
         '<div class="modal-actions" style="margin-top:10px">' +
@@ -1276,13 +1280,17 @@ function tagAdminDeletePoolItem(e, el) {
 
 // ── 添加新条目到池子 ──
 function tagAdminAddToPool() {
-  var name = prompt('输入新二级类目名称：');
-  if (!name || !name.trim()) return; name = name.trim();
+  var input = document.getElementById('tagAdminPoolInput');
+  if (!input) return;
+  var name = input.value.trim();
+  if (!name) return;
   var pool = getSubPool(); if (pool.indexOf(name) !== -1) { showToast('此名称已存在'); return; }
   var schema = getTagSchema(); var assigned = false;
   Object.keys(schema).forEach(function(l1) { if ((schema[l1].subs || []).indexOf(name) !== -1) assigned = true; });
   if (assigned) { showToast('该名称已在分类中使用'); return; }
   pool.push(name); saveSubPool(pool); _refreshPool(); _autoSave();
+  input.value = '';
+  input.focus();
 }
 
 // ── 左侧子项拖拽 ──
