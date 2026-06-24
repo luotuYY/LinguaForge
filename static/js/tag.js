@@ -1455,11 +1455,14 @@ function tagAdminImport() {
 
 // ── 初始化(由 switchPage 懒调用,只执行一次) ──
 // ── 文件导入 ──
+var _tagFileBusy = false;
 function handleTagFiles() {
+  if (_tagFileBusy) return;
   if (window.showDirectoryPicker) {
     pickTagDir().catch(function(e) {
       if (e.name !== 'AbortError' && e.name !== 'SecurityError') {
-        document.getElementById('tagFileInput').click();
+  _tagFileBusy = true;
+        document.getElementById('tagFileInput').click(); _tagFileBusy = false;
       }
     });
   } else {
