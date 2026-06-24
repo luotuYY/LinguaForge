@@ -1048,7 +1048,7 @@ function tagOpenAdmin() {
             '<div class="tag-admin-pool" id="tagAdminPool" ondragover="event.preventDefault()" ondrop="tagAdminPoolDrop(event)"></div>' +
             '<div style="display:flex;gap:4px;margin-top:8px">' +
             '<input id="tagAdminPoolInput" class="tag-admin-sub" placeholder="输入新二级类目" style="flex:1"' +
-            ' onkeydown="if(event.key==="Enter")tagAdminAddToPool()">' +
+            ' onkeydown="if(event.key===\'Enter\')tagAdminAddToPool()">' +
             '<button class="btn btn-sm" onclick="tagAdminAddToPool()">+</button>' +
           '</div>' +
           '</div>' +
