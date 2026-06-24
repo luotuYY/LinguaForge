@@ -14,6 +14,7 @@ var tagState = {
   query: '',
   previewRowLimit: 2000,
   tagStarted: false,  // 是否过分词任务(用于区分「开始」和「继续」)
+  _tagCounts: null,  // 缓存分类计数，避免每次O(n) filter
 };
 
 // ── 分类体系(动态 schema,前端可自定义) ──
@@ -300,6 +301,8 @@ function tagRenderColumns() {
       }
     }
   });
+  // 校验后每次渲染都重建计数缓存（与渲染本身 O(n) 相比开销可忽略）
+  _initTagCounts();
   var html = '';
   Object.keys(schema).forEach(function(l1) {
     var cat = schema[l1];
@@ -374,7 +377,7 @@ function tagUpdateOneCard(line) {
         var newCard = targetBody.querySelector('.tag-card[data-index="' + line.index + '"]');
         if (newCard) newCard.setAttribute('data-l1', expectedL1);
       }
-      tagUpdateCounts();
+      _tagBumpCount(cardL1, expectedL1);
     } else {
       // 已在正确栏,更新 data-l1 以防万一
       oldCard.setAttribute('data-l1', expectedL1);
@@ -393,14 +396,44 @@ function tagUpdateOneCard(line) {
 }
 
 // ── 列头计数更新 ──
+function _initTagCounts() {
+  var schema = getEnabledSchema();
+  var counts = {};
+  Object.keys(schema).forEach(function(l1) { counts[l1] = 0; });
+  var untagged = 0;
+  tagState.lines.forEach(function(l) {
+    if (l.tag_l1 && counts.hasOwnProperty(l.tag_l1)) {
+      counts[l.tag_l1]++;
+    } else {
+      untagged++;
+    }
+  });
+  counts['__untagged'] = untagged;
+  tagState._tagCounts = counts;
+}
+
+function _tagBumpCount(oldL1, newL1) {
+  var c = tagState._tagCounts;
+  if (!c) { _initTagCounts(); c = tagState._tagCounts; }
+  oldL1 = oldL1 || '__untagged';
+  newL1 = newL1 || '__untagged';
+  if (oldL1 !== newL1) {
+    if (c.hasOwnProperty(oldL1)) c[oldL1] = Math.max(0, (c[oldL1] || 1) - 1);
+    if (c.hasOwnProperty(newL1)) c[newL1] = (c[newL1] || 0) + 1;
+  }
+}
+
 function tagUpdateCounts() {
   var schema = getEnabledSchema();
+  var c = tagState._tagCounts;
+  if (!c) { _initTagCounts(); c = tagState._tagCounts; }
+  if (!c) return;
   Object.keys(schema).forEach(function(l1) {
     var el = document.getElementById('cnt-' + l1);
-    if (el) el.textContent = tagState.lines.filter(function(l) { return l.tag_l1 === l1; }).length;
+    if (el) el.textContent = c[l1] || 0;
   });
   var ue = document.getElementById('cnt-untagged');
-  if (ue) ue.textContent = tagState.lines.filter(function(l) { return !l.tag_l1; }).length;
+  if (ue) ue.textContent = c['__untagged'] || 0;
 }
 
 function tagRenderCard(l) {
@@ -747,6 +780,7 @@ function tagDrop(e) {
     if (!line.tag_l2 || (dropSchema[oldL1] && dropSchema[oldL1].subs.indexOf(line.tag_l2)===-1))
       line.tag_l2 = dropSchema[targetL1].subs[0] || '';
   } else { line.tag_l1 = ''; line.tag_l2 = ''; }
+  _tagBumpCount(oldL1, line.tag_l1);
   // If moving to a different L1 that has subs, re-tag via LLM
   if (targetL1 && targetL1 !== oldL1 && dropSchema[targetL1] && dropSchema[targetL1].subs.length > 0) {
     _tagRetagOnDrop(line, targetL1);
@@ -871,8 +905,10 @@ function tagEditCategory(index) {
   modal.style.display = 'flex'; modal._index = index;
   document.getElementById('tagEditOk').onclick = function() {
     var sel = document.getElementById('tagEditSelect').value;
+    var _oldL1_ep = line.tag_l1;
     if (sel) { var p = sel.split('|'); line.tag_l1 = p[0]; line.tag_l2 = p[1]||''; }
     else { line.tag_l1 = ''; line.tag_l2 = ''; }
+    _tagBumpCount(_oldL1_ep, line.tag_l1);
     line._manualEdit = true;  // 标记为手动编辑,防止被 LLM 结果覆盖
     modal.style.display = 'none'; tagRenderColumns(); tagRenderPreview();
   };
@@ -907,6 +943,7 @@ async function tagStart() {
   if (pending.length === 0 && hasCompleted) {
     // 全部已完成 → 清空重来
     tagState.lines.forEach(function(l) { l.tag_l1 = ''; l.tag_l2 = ''; l.confidence = 0; });
+    _initTagCounts();
     pending = tagState.lines.slice();
   }
   if (pending.length === 0) { showToast('没有待分词的条目'); return; }
@@ -1070,7 +1107,7 @@ function tagUpdateTagStartButton() {
 
 function tagClearAll() {
   if (tagState.lines.length===0) return;
-  tagState.lines=[]; tagState.files=[]; tagState.fileNames=[]; tagState.query=''; tagState.tagStarted=false;
+  tagState.lines=[]; tagState.files=[]; tagState.fileNames=[]; tagState.query=''; tagState.tagStarted=false; tagState._tagCounts = null;
   document.getElementById('tagSearch').value='';
   document.getElementById('tagManualInput').value='';
   tagRenderFileList(); tagRenderPreview(); tagRenderColumns();
