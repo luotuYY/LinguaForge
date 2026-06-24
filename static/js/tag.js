@@ -1902,4 +1902,7 @@ window.handleTagFiles = handleTagFiles;
 window.tagExportDialog = tagExportDialog;
 window.tagExportDo = tagExportDo;
 
+window.tagImportDialog = tagImportDialog;
+window.tagImportDo = tagImportDo;
+
 export {};
