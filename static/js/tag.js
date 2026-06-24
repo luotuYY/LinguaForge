@@ -1176,6 +1176,7 @@ function tagAdminRemoveGroup(btn) {
   });
   saveSubPool(pool);
   group.remove();
+  _refreshPool();
   _autoSave();
 }
 
