@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TxtLlmHub — 渲染层
  * 预览列表、对比表格的 DOM 渲染，搜索 UI，复选框/排序状态管理
  * Depends on: utils.js, state.js
@@ -30,7 +30,7 @@ function renderPreview() {
   setHighlight(q);
   var checkedFiles = getCheckedFileNames();
   var filtered = state.lines.filter(function (l) {
-    return !l._file || checkedFiles.indexOf(l._file) >= 0;
+    return !l.file || checkedFiles.indexOf(l.file) >= 0;
   });
   var lines = filtered.slice();
   var limit = state.previewRowLimit || 2000;

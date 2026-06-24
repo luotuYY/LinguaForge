@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TxtLlmHub — API 层
  * 文件上传解析、手动输入、LLM 翻译调用、批量流式翻译、文件管理
  * Depends on: utils.js, state.js, render.js
@@ -116,7 +116,7 @@ async function loadManualInput() {
         var obj = {};
         for (var k in l) { obj[k] = l[k]; }
         obj.new_translation = '';
-        obj._file = '手动录入';
+        obj.file = '手动录入';
         obj.index = offset + i;
         return obj;
       });
@@ -133,7 +133,7 @@ async function loadManualInput() {
       state.lines = d.lines.map(function (l, i) {
         var obj = {};
         for (var k in l) { obj[k] = l[k]; }
-        obj._file = '手动录入';
+        obj.file = '手动录入';
         obj.index = i;
         return obj;
       });
@@ -376,7 +376,7 @@ function renderFileList() {
   var html = '';
   for (var i = 0; i < state.files.length; i++) {
     var f = state.files[i];
-    var lineCount = state.lines.filter(function (l) { return l._file === f.name; }).length;
+    var lineCount = state.lines.filter(function (l) { return l.file === f.name; }).length;
     html += '<div class="file-entry" draggable="true" data-file-index="' + i + '" ondragstart="onFileDragStart(event)" ondragover="onFileDragOver(event)" ondrop="onFileDrop(event)" ondragend="onFileDragEnd(event)">' +
       '<input type="checkbox" class="file-check" ' + (f.checked ? 'checked' : '') + ' onchange="toggleFile(' + i + ')" title="勾选后该文件内容会出现在预览和翻译中">' +
       '<span class="file-name">' + escHtml(f.name) + '</span>' +
@@ -395,7 +395,7 @@ function deleteFile(index) {
   // 删除属于该文件的行
   var indices = [];
   for (var i = state.lines.length - 1; i >= 0; i--) {
-    if (state.lines[i]._file === fname) indices.push(i);
+    if (state.lines[i].file === fname) indices.push(i);
   }
   for (var di = 0; di < indices.length; di++) {
     state.previewChecked.delete(indices[di]);
@@ -441,7 +441,7 @@ function toggleFile(index) {
   if (!f) return;
   f.checked = !f.checked;
   var checkedNames = state.files.filter(function (x) { return x.checked; }).map(function (x) { return x.name; });
-  var visible = state.lines.some(function (l) { return l._file && checkedNames.indexOf(l._file) >= 0; });
+  var visible = state.lines.some(function (l) { return l.file && checkedNames.indexOf(l.file) >= 0; });
   renderFileList();
   $('btnTranslateAll').disabled = !visible;
   renderPreview();
@@ -496,12 +496,12 @@ function onFileDrop(e) {
   for (var fi = 0; fi < state.files.length; fi++) {
     var fname = state.files[fi].name;
     for (var li = 0; li < state.lines.length; li++) {
-      if (state.lines[li]._file === fname) newLines.push(state.lines[li]);
+      if (state.lines[li].file === fname) newLines.push(state.lines[li]);
     }
   }
   // 无文件归属的行追加到末尾
   for (var li2 = 0; li2 < state.lines.length; li2++) {
-    if (!state.lines[li2]._file) newLines.push(state.lines[li2]);
+    if (!state.lines[li2].file) newLines.push(state.lines[li2]);
   }
   state.lines = newLines;
 
@@ -567,7 +567,7 @@ function deleteCheckedPreview() {
   rebuildIndicesAndCheckboxes();
   // 删除空文件条目
   state.files = state.files.filter(function (f) {
-    return state.lines.some(function (l) { return l._file === f.name; });
+    return state.lines.some(function (l) { return l.file === f.name; });
   });
   state.fileNames = state.files.map(function (f) { return f.name; });
   renderFileList();
@@ -592,8 +592,8 @@ function deletePreviewLine(index, e) {
   state.compareChecked.delete(index);
   rebuildIndicesAndCheckboxes();
   // 删除文件条目 if no lines remain
-  if (line._file && !state.lines.some(function (l) { return l._file === line._file; })) {
-    state.files = state.files.filter(function (f) { return f.name !== line._file; });
+  if (line.file && !state.lines.some(function (l) { return l.file === line.file; })) {
+    state.files = state.files.filter(function (f) { return f.name !== line.file; });
     state.fileNames = state.files.map(function (f) { return f.name; });
   }
   renderFileList();

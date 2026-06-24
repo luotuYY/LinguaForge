@@ -108,7 +108,7 @@ async function tagProcessFiles(files) {
     var offset = tagState.lines.length;
     var linesByFile = {};
     for (var li = 0; li < d.lines.length; li++) {
-      var lf = d.lines[li]._file || '';
+      var lf = d.lines[li].file || '';
       if (!linesByFile[lf]) linesByFile[lf] = [];
       linesByFile[lf].push(d.lines[li]);
     }
@@ -122,7 +122,7 @@ async function tagProcessFiles(files) {
       for (var fli = 0; fli < fileLines.length; fli++) {
         tagState.lines.push({
           index: offset++, original: fileLines[fli].original,
-          translation: fileLines[fli].translation, _file: fname,
+          translation: fileLines[fli].translation, file: fname,
           tag_l1: '', tag_l2: '', confidence: 0
         });
         addedLines++;
@@ -152,7 +152,7 @@ async function tagLoadManualInput() {
     d.lines.forEach(function(l, i) {
       tagState.lines.push({
         index: offset+i, original: l.original, translation: l.translation,
-        _file: '手动录入', tag_l1: '', tag_l2: '', confidence: 0
+        file: '手动录入', tag_l1: '', tag_l2: '', confidence: 0
       });
     });
     if (tagState.fileNames.indexOf('手动录入') === -1) {
@@ -173,7 +173,7 @@ function tagRenderFileList() {
   var html = '';
   for (var i = 0; i < tagState.files.length; i++) {
     var f = tagState.files[i];
-    var cnt = tagState.lines.filter(function(l) { return l._file === f.name; }).length;
+    var cnt = tagState.lines.filter(function(l) { return l.file === f.name; }).length;
     html += '<div class="file-entry"><span class="file-name">' + escHtml(f.name) +
       '</span><span class="file-count">' + cnt + ' 行</span>' +
       '<span class="file-delete" onclick="tagDeleteFile(' + i + ')">🗑</span></div>';
@@ -184,7 +184,7 @@ function tagRenderFileList() {
 function tagDeleteFile(index) {
   var f = tagState.files[index];
   if (!f) return;
-  tagState.lines = tagState.lines.filter(function(l) { return l._file !== f.name; });
+  tagState.lines = tagState.lines.filter(function(l) { return l.file !== f.name; });
   tagState.lines.forEach(function(l, i) { l.index = i; });
   tagState.files.splice(index, 1);
   tagState.fileNames = tagState.files.map(function(x) { return x.name; });
@@ -238,7 +238,7 @@ function tagRenderPreview() {
   setHighlight(q);
   var checkedFiles = tagState.files.map(function(f) { return f.name; });
   var filtered = tagState.lines.filter(function(l) {
-    return !l._file || checkedFiles.indexOf(l._file) >= 0;
+    return !l.file || checkedFiles.indexOf(l.file) >= 0;
   });
   var lines = filtered.slice();
   var limit = tagState.previewRowLimit || 0;
@@ -504,7 +504,7 @@ function tagSendToTranslate() {
         truncated: false,
         warning: '',
         degraded: false,
-        _file: virtualFile,
+        file: virtualFile,
         index: startIndex + newLines.length,
         _tag_l1: l.tag_l1,
         _tag_l2: l.tag_l2,

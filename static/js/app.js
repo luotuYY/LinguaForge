@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TxtLlmHub — 事件处理与流程编排
  * SPA 页面切换、搜索、翻译控制、导出、网格拖拽、行内编辑
  * Depends on: utils.js, state.js, api.js, render.js
@@ -165,8 +165,8 @@ async function translateAll() {
   var checkedFiles = getCheckedFileNames();
   var pending = state.lines.filter(function (l) {
     if (l.new_translation || l.error) return false;
-    if (!l._file) return true;
-    return checkedFiles.indexOf(l._file) >= 0;
+    if (!l.file) return true;
+    return checkedFiles.indexOf(l.file) >= 0;
   });
   var hasCompleted = state.lines.some(function (l) { return l.new_translation && !l.error; });
 
@@ -522,7 +522,7 @@ function exportCheckedRows() {
   var groups = new Map();
   for (var i = 0; i < rows.length; i++) {
     var l = rows[i];
-    var fname = l._file || (state.fileNames[0] || 'output');
+    var fname = l.file || (state.fileNames[0] || 'output');
     if (!groups.has(fname)) groups.set(fname, []);
     groups.get(fname).push(l);
   }
@@ -539,7 +539,7 @@ function exportFile() {
   var groups = new Map();
   for (var i = 0; i < rows.length; i++) {
     var l = rows[i];
-    var fname = l._file || (state.fileNames[0] || 'output');
+    var fname = l.file || (state.fileNames[0] || 'output');
     if (!groups.has(fname)) groups.set(fname, []);
     groups.get(fname).push(l);
   }
