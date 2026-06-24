@@ -874,7 +874,7 @@ function tagExportDialog() {
     modal.className = 'modal-overlay'; modal.style.display = 'none';
     modal.innerHTML =
       '<div class="modal-box" style="max-width:420px">' +
-        '<div class="modal-msg" style="font-weight:600;margin-bottom:10px">📤 导出方案</div>' +
+        '<div class="modal-msg" style="font-weight:600;margin-bottom:10px">📤 导出方案 <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted)">（多文件分别导出需浏览器授权自动下载）</span></div>' +
         '<div style="margin-bottom:10px">' +
           '<div style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px">导出模式</div>' +
           '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:4px"><input type="radio" name="tagExpMode" value="merge" checked> 合并导出（单个文件）</label>' +
