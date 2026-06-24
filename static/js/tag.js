@@ -862,6 +862,198 @@ function tagExportSeparate() {
   })(0);
 }
 
+
+// ── 导出弹窗 ──
+function tagExportDialog() {
+  var tagged = tagState.lines.filter(function(l){return l.tag_l1;});
+  if (tagged.length===0) { showToast('没有已分类的词条'); return; }
+
+  var modal = document.getElementById('tagExportModal');
+  if (!modal) {
+    modal = document.createElement('div'); modal.id = 'tagExportModal';
+    modal.className = 'modal-overlay'; modal.style.display = 'none';
+    modal.innerHTML =
+      '<div class="modal-box" style="max-width:420px">' +
+        '<div class="modal-msg" style="font-weight:600;margin-bottom:10px">📤 导出方案</div>' +
+        '<div style="margin-bottom:10px">' +
+          '<div style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px">导出模式</div>' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:4px"><input type="radio" name="tagExpMode" value="merge" checked> 合并导出（单个文件）</label>' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem"><input type="radio" name="tagExpMode" value="separate"> 分别导出（多个文件）</label>' +
+        '</div>' +
+        '<div style="margin-bottom:10px">' +
+          '<div style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px">分类粒度</div>' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:4px"><input type="radio" name="tagExpGran" value="l1" checked> 一级类目</label>' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem"><input type="radio" name="tagExpGran" value="l2"> 二级类目</label>' +
+        '</div>' +
+        '<div style="margin-bottom:10px">' +
+          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem"><input type="checkbox" id="tagExpUntagged" checked> 包含未分类条目</label>' +
+        '</div>' +
+        '<div id="tagExportPreview" style="font-size:0.7rem;color:var(--text-muted);margin-bottom:10px;max-height:80px;overflow-y:auto"></div>' +
+        '<div class="modal-actions">' +
+          '<span style="flex:1"></span>' +
+          '<button class="btn btn-primary" onclick="tagExportDo()">导出</button>' +
+          '<button class="btn" id="tagExportCancel">取消</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+    document.getElementById('tagExportCancel').onclick = function() { modal.style.display = 'none'; };
+
+    // Update preview on radio change
+    modal.querySelectorAll('input[name="tagExpMode"], input[name="tagExpGran"], #tagExpUntagged').forEach(function(el) {
+      el.addEventListener('change', _tagExportUpdatePreview);
+    });
+  }
+
+  modal.style.display = 'flex';
+  _tagExportUpdatePreview();
+}
+
+function _tagExportUpdatePreview() {
+  var preview = document.getElementById('tagExportPreview'); if (!preview) return;
+  var mode = (document.querySelector('input[name="tagExpMode"]:checked') || {}).value || 'merge';
+  var gran = (document.querySelector('input[name="tagExpGran"]:checked') || {}).value || 'l1';
+  var incUntagged = document.getElementById('tagExpUntagged').checked;
+  var tagged = tagState.lines.filter(function(l){return l.tag_l1;});
+
+  if (gran === 'l2') {
+    prevL2(preview, mode, tagged, incUntagged);
+  } else {
+    prevL1(preview, mode, tagged, incUntagged);
+  }
+}
+
+function prevL1(preview, mode, tagged, incUntagged) {
+  var schema = getEnabledSchema(); var lines = [];
+  Object.keys(schema).forEach(function(l1) {
+    var cnt = tagged.filter(function(l){return l.tag_l1===l1;}).length;
+    if (cnt > 0) lines.push((mode==='separate'?'📄 ':'  ')+l1+': '+cnt+' 条');
+  });
+  if (incUntagged) {
+    var u = tagState.lines.filter(function(l){return !l.tag_l1;}).length;
+    if (u>0) lines.push('  未分类: '+u+' 条');
+  }
+  preview.textContent = (mode==='merge'?'合并为 1 个文件\n':'分别导出 '+Object.keys(schema).filter(function(k){return tagged.filter(function(l){return l.tag_l1===k;}).length>0;}).length+' 个文件\n') + lines.join('\n');
+}
+
+function prevL2(preview, mode, tagged, incUntagged) {
+  var schema = getEnabledSchema(); var totalFiles = 0; var lines = [];
+  Object.keys(schema).forEach(function(l1) {
+    var items = tagged.filter(function(l){return l.tag_l1===l1;});
+    var subs = {}; items.forEach(function(l){ var k = l.tag_l2||'未细分'; if(!subs[k]) subs[k]=0; subs[k]++; });
+    var subKeys = Object.keys(subs);
+    if (mode==='separate') totalFiles += subKeys.length;
+    lines.push(l1+':');
+    subKeys.forEach(function(l2) { lines.push((mode==='separate'?'  📄 ':'    ')+l2+': '+subs[l2]+' 条'); });
+  });
+  if (incUntagged) {
+    var u = tagState.lines.filter(function(l){return !l.tag_l1;}).length;
+    if (u>0) { lines.push('未分类: '+u+' 条'); if (mode==='separate') totalFiles++; }
+  }
+  preview.textContent = (mode==='merge'?'合并为 1 个文件\n':'分别导出 '+totalFiles+' 个文件\n') + lines.join('\n');
+}
+
+function tagExportDo() {
+  var mode = (document.querySelector('input[name="tagExpMode"]:checked') || {}).value || 'merge';
+  var gran = (document.querySelector('input[name="tagExpGran"]:checked') || {}).value || 'l1';
+  var incUntagged = document.getElementById('tagExpUntagged').checked;
+  var modal = document.getElementById('tagExportModal');
+  modal.style.display = 'none';
+
+  var tagged = tagState.lines.filter(function(l){return l.tag_l1;});
+
+  if (mode === 'merge') {
+    // 合并导出
+    var parts = [], total = 0;
+    var schema = getEnabledSchema();
+
+    if (gran === 'l1') {
+      Object.keys(schema).forEach(function(l1) {
+        var items = tagged.filter(function(l){return l.tag_l1===l1;});
+        if (items.length===0) return;
+        parts.push('=== '+l1+' ('+items.length+'条) ===');
+        var subs = {}; items.forEach(function(l){ var k=l.tag_l2||'未细分'; if(!subs[k])subs[k]=[]; subs[k].push(l); });
+        var subKeys = Object.keys(subs);
+        subKeys.forEach(function(l2) {
+          if (subKeys.length>1) parts.push('--- '+l2+' ---');
+          subs[l2].forEach(function(l) { parts.push(l.translation ? l.original+'='+l.translation : l.original); });
+        });
+        parts.push(''); total += items.length;
+      });
+    } else {
+      // L2 粒度：以二级类目作为分组头
+      var l2Groups = {};
+      Object.keys(schema).forEach(function(l1) {
+        var items = tagged.filter(function(l){return l.tag_l1===l1;});
+        items.forEach(function(l) {
+          var key = l1 + ' / ' + (l.tag_l2||'未细分');
+          if (!l2Groups[key]) l2Groups[key] = [];
+          l2Groups[key].push(l);
+        });
+      });
+      Object.keys(l2Groups).forEach(function(key) {
+        var g = l2Groups[key];
+        parts.push('=== '+key+' ('+g.length+'条) ===');
+        g.forEach(function(l) { parts.push(l.translation ? l.original+'='+l.translation : l.original); });
+        parts.push(''); total += g.length;
+      });
+    }
+
+    if (incUntagged) {
+      var untagged = tagState.lines.filter(function(l){return !l.tag_l1;});
+      if (untagged.length>0) {
+        parts.push('=== 未分类 ('+untagged.length+'条) ===');
+        untagged.forEach(function(l) { parts.push(l.translation ? l.original+'='+l.translation : l.original); });
+      }
+    }
+    tagTriggerDownload('tag_result.txt', parts.join('\n').trimEnd());
+    tagLog('导出: tag_result.txt ('+total+'条)');
+    showToast('已导出 tag_result.txt');
+  } else {
+    // 分别导出
+    if (gran === 'l1') {
+      tagExportSeparateCore(tagged, incUntagged);
+    } else {
+      // L2 粒度：每个二级类目单独文件
+      var schema = getEnabledSchema(); var files = 0;
+      var allL2 = [];
+      Object.keys(schema).forEach(function(l1) {
+        var items = tagged.filter(function(l){return l.tag_l1===l1;});
+        var subs = {}; items.forEach(function(l){ var k=l.tag_l2||'未细分'; if(!subs[k])subs[k]=[]; subs[k].push(l); });
+        Object.keys(subs).forEach(function(l2) { allL2.push({l1:l1, l2:l2, items:subs[l2]}); });
+      });
+      if (incUntagged) {
+        var u = tagState.lines.filter(function(l){return !l.tag_l1;});
+        if (u.length>0) allL2.push({l1:'', l2:'未分类', items:u});
+      }
+      (function next(i) {
+        if (i>=allL2.length) { showToast('已导出 '+files+' 个文件'); return; }
+        var g = allL2[i];
+        var fname = (g.l1 ? g.l1+'_' : '') + g.l2 + '.txt';
+        tagTriggerDownload(fname, g.items.map(function(l){return l.translation?l.original+'='+l.translation:l.original;}).join('\n'));
+        files++;
+        setTimeout(function(){next(i+1);}, 200);
+      })(0);
+    }
+  }
+}
+
+function tagExportSeparateCore(tagged, incUntagged) {
+  var cats = Object.keys(getEnabledSchema()), files = 0;
+  (function next(i) {
+    if (i>=cats.length) {
+      if (incUntagged) {
+        var u = tagState.lines.filter(function(l){return !l.tag_l1;});
+        if (u.length>0) { tagTriggerDownload('未分类.txt', u.map(function(l){return l.translation?l.original+'='+l.translation:l.original;}).join('\n')); files++; }
+      }
+      showToast('已导出 '+files+' 个文件'); return;
+    }
+    var items = tagged.filter(function(l){return l.tag_l1===cats[i];});
+    if (items.length>0) { tagTriggerDownload(cats[i]+'.txt', items.map(function(l){return l.translation?l.original+'='+l.translation:l.original;}).join('\n')); files++; }
+    setTimeout(function(){next(i+1);}, 200);
+  })(0);
+}
+
 function tagTriggerDownload(name, content) {
   var blob = new Blob([content],{type:'text/plain;charset=utf-8'});
   var url = URL.createObjectURL(blob);
@@ -1584,5 +1776,8 @@ window.tagAdminPoolDrop = tagAdminPoolDrop;
 window._autoSave = _autoSave;
 
 window.handleTagFiles = handleTagFiles;
+
+window.tagExportDialog = tagExportDialog;
+window.tagExportDo = tagExportDo;
 
 export {};
