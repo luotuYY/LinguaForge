@@ -151,6 +151,17 @@ body {
 .dot-err { background: var(--red); box-shadow: 0 0 8px rgba(248,113,113,0.4); }
 .toolbar .status-text { font-size: 0.78rem; color: var(--text-secondary); }
 .toolbar-right { display: flex; align-items: center; gap: 8px; }
+/* ===== 导出选项弹出 ===== */
+.export-options {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.export-options.visible {
+  display: inline-flex;
+}
+
 
 /* 商业 API 配置条（工具栏下方，仅商业模式显示） */
 .toolbar-api-bar {
@@ -592,6 +603,9 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 .log-line .err { color: var(--red); }
 .log-line .ok { color: var(--green); }
 
+#dedupLogArea.log-area { max-height: 200px; }
+#dedupLogArea .log-line { white-space: normal; word-break: break-word; }
+
 /* ===== 对比表格 ===== */
 .compare-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.78rem; }
 .compare-table th {
@@ -693,7 +707,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   padding: 10px 22px;
   border-radius: var(--radius);
   font-size: 0.82rem;
-  z-index: 999;
+  z-index: 1100;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.3s ease;
@@ -735,6 +749,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   .param-row { gap: 6px; }
   .param-input { width: 48px; }
   .log-area { max-height: 80px; }
+  #dedupLogArea.log-area { max-height: 140px; }
   .search-input { width: 90px; }
 }
 
@@ -958,13 +973,31 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 
 /* 控制栏 */
 #page-tag .tag-controls-row { flex-shrink: 0; }
+#page-tag .tag-ctrl-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  min-height: 36px;
+}
+#page-tag .tag-ctrl-header .tag-ctrl-title { flex: 1; }
+#page-tag .tag-ctrl-body { padding: 6px 12px; }
 #page-tag .tag-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
+  margin-bottom: 4px;
 }
 #page-tag .tag-controls .btn { font-size: 0.78rem; }
+#page-tag .tag-progress-wrap { margin: 4px 0; }
+#page-tag .tag-controls-row .log-area {
+  max-height: 80px;
+  margin-top: 4px;
+}
+#page-tag .tag-cat-panel {
+  margin-bottom: 6px;
+}
 
 /* 分类结果 */
 #page-tag .tag-bottom-row {
@@ -1152,8 +1185,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   color: #e0e0e0;
 }
 
-/* 进度条 */
-#page-tag .tag-progress-wrap { margin: 8px 0; }
+/* 进度条 - margin controlled in control section above */
 
 /* 分词页响应式 */
 @media (max-width: 900px) {
@@ -1167,7 +1199,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   display: none;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 #page-tag .tag-cat-panel.visible {
   display: grid;
@@ -1354,4 +1386,266 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 }
 .tag-admin-sub-del:active {
   transform: scale(0.85);
+}
+/* ===== 标签管理面板布局 ===== */
+.tag-admin-modal {
+  max-width: 720px;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+}
+.tag-admin-layout {
+  display: flex;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.tag-admin-left {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  max-height: 55vh;
+  padding-right: 4px;
+}
+.tag-admin-right {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid rgba(255,255,255,0.08);
+  padding-left: 10px;
+}
+.tag-admin-pool {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 3px;
+  padding: 4px;
+  background: rgba(0,0,0,0.12);
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.06);
+  min-height: 0;
+}
+.tag-admin-pool-chip {
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 0.68rem;
+  color: #d0d0e8;
+  background: rgba(124,140,248,0.1);
+  border: 1px solid rgba(124,140,248,0.2);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  transition: all 0.15s;
+}
+.tag-admin-pool-chip:hover {
+  background: rgba(124,140,248,0.2);
+  border-color: rgba(124,140,248,0.4);
+}
+.tag-admin-pool-chip.drag-start {
+  opacity: 0.4;
+}
+.tag-admin-pool-del {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 1px;
+}
+.tag-admin-pool-del:hover {
+  color: var(--red);
+}
+.tag-admin-group.drag-over {
+  background: rgba(124,140,248,0.08);
+  outline: 1px dashed rgba(124,140,248,0.3);
+}
+/* 导入/导出粒度选择弹窗 */
+.tag-import-radio:hover {
+  border-color: rgba(124,140,248,0.3);
+}
+.tag-import-radio input[type="radio"] {
+  accent-color: var(--accent);
+}
+
+
+/* ===== 去重页 ===== */
+.dedup-grid {
+  display: grid;
+  grid-template-columns: 0.382fr 0.618fr;
+  gap: 14px;
+  padding: 14px;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  z-index: 5;
+}
+.dedup-left {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+}
+.dedup-upload-card {
+  flex: 0 0 auto;
+  max-height: 50%;
+  display: flex;
+  flex-direction: column;
+}
+.dedup-upload-card > .card-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dedup-upload-card .drop-zone {
+  flex-shrink: 0;
+}
+.dedup-upload-card .drop-zone input[type=file] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  display: block !important;
+}
+.dedup-upload-card .file-info {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  margin-top: 8px;
+}
+.dedup-right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.dedup-eval-card {
+  display: flex;
+  flex-direction: column;
+}
+.dedup-eval-card > .card-body {
+  display: flex;
+  flex-direction: column;
+}
+.dedup-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+#dedupEvalParams {
+  text-align: right;
+}
+#dedupEvalParams .param-row {
+  justify-content: flex-end;
+}
+.dedup-group {
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: rgba(255,255,255,0.03);
+}
+.dedup-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+  background: rgba(255,255,255,0.04);
+}
+.dedup-group-header:hover {
+  background: rgba(255,255,255,0.05);
+}
+.dedup-group-toggle {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.dedup-group-original {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+.dedup-group-count {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.dedup-group-best {
+  font-size: 0.7rem;
+  color: var(--green);
+}
+.dedup-group-body {
+  padding: 4px 10px 8px 10px;
+}
+.dedup-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.dedup-row:hover {
+  background: rgba(255,255,255,0.03);
+}
+.dedup-row:last-child {
+  border-bottom: none;
+}
+.dedup-row-selected {
+  background: rgba(124,140,248,0.08);
+}
+.dedup-row-best {
+  border-left: 3px solid var(--green);
+}
+.dedup-row-original {
+  flex: 1;
+  color: var(--text);
+}
+.dedup-row-trans {
+  flex: 1;
+  color: var(--accent);
+}
+.dedup-row-file {
+  font-size: 0.7rem;
+  color: var(--amber);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+/* 去重导航按钮 */
+/* 悬浮导航 */
+.dedup-nav-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  transition: all 0.15s;
+}
+.dedup-nav-btn:hover { background: rgba(255,255,255,0.12); }
+.dedup-nav-btn:disabled { opacity: 0.3; cursor: default; }
+/* 筛选按钮激活态 */
+.dedup-filter-on {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: var(--accent) !important;
+}
+.dedup-filter-off {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text-secondary);
 }

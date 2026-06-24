@@ -4,6 +4,8 @@
  * Depends on: utils.js
  */
 
+
+import { $, escHtml, showToast, log } from './utils.js';
 // ── 全局状态 ──
 const state = {
   lines: [],
@@ -751,3 +753,51 @@ document.addEventListener('visibilitychange', function () {
     if (!_llmPollTimer) { checkLLM(); _llmPollTimer = setInterval(checkLLM, 15000); }
   }
 });
+// 页面卸载时清理定时器，避免控制台错误
+window.addEventListener('beforeunload', function () {
+  if (_llmPollTimer) { clearInterval(_llmPollTimer); _llmPollTimer = 0; }
+});
+
+// ── Module exports ──
+export { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, DIRECT_DEFAULT, POLISH_DIRECT_DEFAULT, POLISH_STEP2_DEFAULT, getPolishStep2Prompt, setPolishStep2Prompt, resetParamDefault, saveModeParams, loadModeParams, getLLMParams, setMode, updateTranslateAllButton, getApiConfig, loadApiConfig, saveApiConfig, testApiConnection, setProvider, onThinkingChange, checkLLM, loadDefaults, togglePolishStrategy, savePolishStrategy, resetPolishStrategy, showPromptBar, onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt, renderSavedPrompts, togglePrompt, resetSystemPrompt, exportPrompts, importPrompts, updateManualBtn, updateRetryButton, updateExportCheckedButton, promptKey };
+
+// ── Window bindings (HTML onclick compat) ──
+window.state = state;
+window.rebuildIndicesAndCheckboxes = rebuildIndicesAndCheckboxes;
+window.PRESET_PROMPTS = PRESET_PROMPTS;
+window.DIRECT_DEFAULT = DIRECT_DEFAULT;
+window.POLISH_DIRECT_DEFAULT = POLISH_DIRECT_DEFAULT;
+window.POLISH_STEP2_DEFAULT = POLISH_STEP2_DEFAULT;
+window.getPolishStep2Prompt = getPolishStep2Prompt;
+window.setPolishStep2Prompt = setPolishStep2Prompt;
+window.resetParamDefault = resetParamDefault;
+window.saveModeParams = saveModeParams;
+window.loadModeParams = loadModeParams;
+window.getLLMParams = getLLMParams;
+window.setMode = setMode;
+window.updateTranslateAllButton = updateTranslateAllButton;
+window.getApiConfig = getApiConfig;
+window.loadApiConfig = loadApiConfig;
+window.saveApiConfig = saveApiConfig;
+window.testApiConnection = testApiConnection;
+window.setProvider = setProvider;
+window.onThinkingChange = onThinkingChange;
+window.checkLLM = checkLLM;
+window.loadDefaults = loadDefaults;
+window.togglePolishStrategy = togglePolishStrategy;
+window.savePolishStrategy = savePolishStrategy;
+window.resetPolishStrategy = resetPolishStrategy;
+window.showPromptBar = showPromptBar;
+window.onTitleFocus = onTitleFocus;
+window.savePrompt = savePrompt;
+window.loadSavedPrompt = loadSavedPrompt;
+window.deletePrompt = deletePrompt;
+window.renderSavedPrompts = renderSavedPrompts;
+window.togglePrompt = togglePrompt;
+window.resetSystemPrompt = resetSystemPrompt;
+window.exportPrompts = exportPrompts;
+window.importPrompts = importPrompts;
+window.updateManualBtn = updateManualBtn;
+window.updateRetryButton = updateRetryButton;
+window.updateExportCheckedButton = updateExportCheckedButton;
+window.promptKey = promptKey;

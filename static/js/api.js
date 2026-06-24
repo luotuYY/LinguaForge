@@ -4,6 +4,10 @@
  * Depends on: utils.js, state.js, render.js
  */
 
+
+import { $, escHtml, showToast, log, clearLog, logChunk } from './utils.js';
+import { state, rebuildIndicesAndCheckboxes, updateTranslateAllButton, updateManualBtn, updateRetryButton, getLLMParams, getApiConfig } from './state.js';
+import { renderPreview, renderCompare, updateSearchUI, updateCompareRow, updatePreviewLine, setBatchUpdating, updatePreviewSelectAllVisibility, updateSelectAllPreview } from './render.js';
 // ── 文件上传 ──
 async function processFiles(files) {
   var txtFiles = Array.from(files).filter(function (f) { return f.name.endsWith('.txt'); });
@@ -25,7 +29,7 @@ async function processFiles(files) {
       // 按文件分组新行
       var linesByFile = {};
       for (var li = 0; li < d.lines.length; li++) {
-        var lf = d.lines[li]._file || '';
+        var lf = d.lines[li].file || '';
         if (!linesByFile[lf]) linesByFile[lf] = [];
         linesByFile[lf].push(d.lines[li]);
       }
@@ -70,7 +74,8 @@ async function processFiles(files) {
     }
 
     renderFileList();
-    $('btnTranslateAll').disabled = false;
+    state.translateStarted = false;
+    updateTranslateAllButton();
     $('btnRetryFailed').disabled = true;
     $('btnExport').disabled = true;
     $('btnClearAll').disabled = false;
@@ -119,8 +124,8 @@ async function loadManualInput() {
       if (state.fileNames.indexOf('手动录入') === -1) { state.fileNames.push('手动录入'); state.files.push({ name: '手动录入', checked: true }); }
       clearLog();
       renderFileList();
-      $('btnTranslateAll').disabled = false;
       $('btnClearAll').disabled = false;
+      updateTranslateAllButton();
       renderPreview(); renderCompare();
       log('手动添加 ' + d.count + ' 行（共 ' + state.lines.length + ' 行）', '', true);
       showToast('已添加 ' + d.count + ' 行（共 ' + state.lines.length + ' 行）');
@@ -136,6 +141,7 @@ async function loadManualInput() {
       state.files = [{ name: '手动录入', checked: true }];
       state.abort = false;
       state.translating = false;
+      state.translateStarted = false;
       state.previewChecked.clear();
       state.previewQuery = '';
       state.compareQuery = '';
@@ -145,10 +151,10 @@ async function loadManualInput() {
       updateSearchUI('compareSearchWrap', 'compareSearchCount', '');
       clearLog();
       renderFileList();
-      $('btnTranslateAll').disabled = false;
       $('btnRetryFailed').disabled = true;
       $('btnExport').disabled = true;
       $('btnClearAll').disabled = false;
+      updateTranslateAllButton();
       renderPreview(); renderCompare();
       $('translateHint').style.display = 'none';
       log('手动录入 ' + d.count + ' 行', '', true);
@@ -533,7 +539,8 @@ function resetSourceInput() {
   renderFileList();
   renderPreview();
   renderCompare();
-  $('btnTranslateAll').disabled = true;
+  state.translateStarted = false;
+  updateTranslateAllButton();
   $('btnRetryFailed').disabled = true;
   $('btnClearAll').disabled = true;
   $('btnExport').disabled = true;
@@ -600,3 +607,24 @@ function deletePreviewLine(index, e) {
   }
   log('[' + (index + 1) + '] 已删除');
 }
+
+// ── Module exports ──
+export { processFiles, loadManualInput, translateOneCore, enterTranslatingState, exitTranslatingState, translateBatchItems, renderFileList, deleteFile, toggleFile, onFileDragStart, onFileDragOver, onFileDragEnd, onFileDrop, resetSourceInput, deleteCheckedPreview, deletePreviewLine };
+
+// ── Window bindings (HTML onclick compat) ──
+window.processFiles = processFiles;
+window.loadManualInput = loadManualInput;
+window.translateOneCore = translateOneCore;
+window.enterTranslatingState = enterTranslatingState;
+window.exitTranslatingState = exitTranslatingState;
+window.translateBatchItems = translateBatchItems;
+window.renderFileList = renderFileList;
+window.deleteFile = deleteFile;
+window.toggleFile = toggleFile;
+window.onFileDragStart = onFileDragStart;
+window.onFileDragOver = onFileDragOver;
+window.onFileDragEnd = onFileDragEnd;
+window.onFileDrop = onFileDrop;
+window.resetSourceInput = resetSourceInput;
+window.deleteCheckedPreview = deleteCheckedPreview;
+window.deletePreviewLine = deletePreviewLine;

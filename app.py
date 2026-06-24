@@ -110,17 +110,10 @@ def _build_api_headers(api_config: dict = None) -> dict:
 
 
 def _is_nontranslatable(text: str) -> bool:
-    """判断文本是否为纯符号/分隔线等无需翻译的内容"""
-    return not re.search(
-        r'[A-Za-z'
-        r'぀-ゟ'     # 平假名
-        r'゠-ヿ'     # 片假名
-        r'一-鿿'     # CJK 汉字
-        r'가-힯'     # 韩文
-        r'Ѐ-ӿ'     # 西里尔
-        r']',
-        text,
-    )
+    """判断文本是否为纯符号/分隔线等无需翻译的内容
+    使用 unicodedata.category 检测任意 Unicode 文字（覆盖所有脚本）"""
+    import unicodedata
+    return not any(unicodedata.category(ch).startswith("L") for ch in text)
 
 
 def _call_llm(text: str, overrides: dict = None, api_config: dict = None) -> dict:
@@ -280,7 +273,7 @@ def _parse_txt(content: str, filename: str = "") -> list[dict]:
             "new_translation": "",
         }
         if filename:
-            line["_file"] = filename
+            line["file"] = filename
         lines.append(line)
     return lines
 def _extract_overrides(data: dict) -> dict:
@@ -513,13 +506,25 @@ def tag_batch():
 
 
 def _stream_batch_response_tag(valid_items, empty_indices, concurrency, submit_fn):
-    """分词专用批量流式响应（返回 tag_l1/tag_l2/confidence 而非 translation）"""
+    """分词批量流式响应 -> 委托给统一 _stream_batch_response 处理"""
+    return _stream_batch_response(valid_items, empty_indices, concurrency, submit_fn, result_mode="tag")
+
+
+def _stream_batch_response(valid_items, empty_indices, concurrency, submit_fn, result_mode="translate"):
+    """通用批量流式响应
+    result_mode: "translate" 返回翻译字段 | "tag" 返回 tag_l1/tag_l2/confidence
+    """
     _sentinel = object()
     cancel_event = threading.Event()
 
     def generate():
         for i in empty_indices:
-            yield (json.dumps({"index": i, "tag_l1": "", "tag_l2": "", "confidence": 0, "error": ""}, ensure_ascii=False) + "\n").encode("utf-8")
+            empty_obj = (
+                {"index": i, "tag_l1": "", "tag_l2": "", "confidence": 0, "error": ""}
+                if result_mode == "tag"
+                else {"index": i, "new_translation": "", "error": ""}
+            )
+            yield (json.dumps(empty_obj, ensure_ascii=False) + "\n").encode("utf-8")
 
         result_queue = queue.Queue()
 
@@ -538,24 +543,28 @@ def _stream_batch_response_tag(valid_items, empty_indices, concurrency, submit_f
                             result = future.result()
                         except Exception as exc:
                             result = {"translation": "", "error": str(exc)}
-                        tag_l1, tag_l2, confidence = "", "", 0
-                        content = result.get("translation", "")
-                        if content and not result.get("error"):
-                            try:
-                                s = content.index("{")
-                                e = content.rindex("}")
-                                j = json.loads(content[s:e+1])
-                                tag_l1 = j.get("l1", "")
-                                tag_l2 = j.get("l2", "")
-                                confidence = j.get("confidence", 0)
-                            except (ValueError, json.JSONDecodeError, KeyError):
-                                pass
-                        result_queue.put((idx, tag_l1, tag_l2, confidence, result.get("error", "")))
+                        if result_mode == "tag":
+                            tag_l1, tag_l2, confidence = "", "", 0
+                            content_text = result.get("translation", "")
+                            if content_text and not result.get("error"):
+                                try:
+                                    s = content_text.index("{")
+                                    e = content_text.rindex("}")
+                                    j = json.loads(content_text[s:e+1])
+                                    tag_l1 = j.get("l1", "")
+                                    tag_l2 = j.get("l2", "")
+                                    confidence = j.get("confidence", 0)
+                                except (ValueError, json.JSONDecodeError, KeyError):
+                                    pass
+                            result_queue.put((idx, tag_l1, tag_l2, confidence, result.get("error", "")))
+                        else:
+                            result_queue.put((idx, result))
                 except Exception:
                     pass
                 finally:
                     cancel_event.set()
                     executor.shutdown(wait=False)
+                    _close_session()
             result_queue.put(_sentinel)
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -565,77 +574,22 @@ def _stream_batch_response_tag(valid_items, empty_indices, concurrency, submit_f
                 item = result_queue.get(timeout=LLM_TIMEOUT + 30)
                 if item is _sentinel:
                     break
-                idx, tag_l1, tag_l2, confidence, error = item
-                line = json.dumps({
-                    "index": idx, "tag_l1": tag_l1, "tag_l2": tag_l2,
-                    "confidence": confidence, "error": error,
-                }, ensure_ascii=False)
-                yield (line + "\n").encode("utf-8")
-        except (queue.Empty, GeneratorExit):
-            cancel_event.set()
-
-    return Response(
-        stream_with_context(generate()),
-        mimetype="application/x-ndjson",
-        direct_passthrough=True,
-        headers={
-            "X-Concurrency": str(concurrency),
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-def _stream_batch_response(valid_items, empty_indices, concurrency, submit_fn):
-    """通用批量翻译流式响应"""
-    _sentinel = object()
-    cancel_event = threading.Event()
-
-    def generate():
-        for i in empty_indices:
-            yield (json.dumps({"index": i, "new_translation": "", "error": ""}, ensure_ascii=False) + "\n").encode("utf-8")
-
-        result_queue = queue.Queue()
-
-        def _worker():
-            with ThreadPoolExecutor(max_workers=concurrency) as executor:
-                try:
-                    future_map = {}
-                    for idx, item in valid_items:
-                        future = submit_fn(executor, idx, item)
-                        future_map[future] = idx
-                    for future in as_completed(future_map):
-                        if cancel_event.is_set():
-                            break
-                        idx = future_map[future]
-                        try:
-                            result = future.result()
-                        except Exception as exc:
-                            result = {"translation": "", "error": str(exc)}
-                        result_queue.put((idx, result))
-                except Exception:
-                    pass
-                finally:
-                    cancel_event.set()
-                    executor.shutdown(wait=False)
-            result_queue.put(_sentinel)
-
-        threading.Thread(target=_worker, daemon=True).start()
-
-        try:
-            while True:
-                item = result_queue.get(timeout=LLM_TIMEOUT + 30)
-                if item is _sentinel:
-                    break
-                idx, result = item
-                line = json.dumps({
-                    "index": idx,
-                    "new_translation": result.get("translation", ""),
-                    "error": result.get("error", ""),
-                    "truncated": result.get("truncated", False),
-                    "warning": result.get("warning", ""),
-                    "degraded": result.get("degraded", False),
-                }, ensure_ascii=False)
+                if result_mode == "tag":
+                    idx, tag_l1, tag_l2, confidence, error_str = item
+                    line = json.dumps({
+                        "index": idx, "tag_l1": tag_l1, "tag_l2": tag_l2,
+                        "confidence": confidence, "error": error_str,
+                    }, ensure_ascii=False)
+                else:
+                    idx, result = item
+                    line = json.dumps({
+                        "index": idx,
+                        "new_translation": result.get("translation", ""),
+                        "error": result.get("error", ""),
+                        "truncated": result.get("truncated", False),
+                        "warning": result.get("warning", ""),
+                        "degraded": result.get("degraded", False),
+                    }, ensure_ascii=False)
                 yield (line + "\n").encode("utf-8")
         except (queue.Empty, GeneratorExit):
             cancel_event.set()
@@ -787,6 +741,299 @@ def get_config():
 
 import atexit
 atexit.register(_close_session)
+
+# ═══════════════════════════════════════════
+# 去重模块
+# ═══════════════════════════════════════════\]
+
+import io
+import zipfile
+
+DEDUP_DEFAULT_CONCURRENCY = 5
+
+# ── 去重评估默认策略（结构化提示词） ──
+DEDUP_DEFAULT_STRATEGY = (
+    "你是一个专业的文本质量评估专家。\n"
+    "以下是一组具有相同原文但不同译文的条目，请判断哪一条译文质量最高。\n"
+    "评估标准：准确性（是否忠实于原文）、自然度（是否通顺地道）、语境适配（是否符合游戏场景）。"
+)
+
+# 输出格式 → 追加在角色指令 + 待评估列表之后
+DEDUP_OUTPUT_FORMAT = (
+    "只输出最佳条目的序号（从0开始的数字），不要任何其他文字。"
+)
+
+
+def _parse_txt_with_index(content: str, filename: str = "") -> list[dict]:
+    entries = _parse_txt(content, filename)
+    # 还原 true line number（跳过空行以匹配 dedup_apply 的 splitlines 索引）
+    lines = content.splitlines()
+    real_idx = 0
+    for entry in entries:
+        while real_idx < len(lines) and not lines[real_idx]:
+            real_idx += 1
+        entry["line"] = real_idx
+        real_idx += 1
+    return entries
+
+
+@app.route("/api/dedup/upload", methods=["POST"])
+def dedup_upload():
+    files = request.files.getlist("file")
+    if not files:
+        return jsonify({"error": "未提供文件"}), 400
+
+    # 从前端传入的独立路径字段读取文件相对路径
+    _sent_paths = []
+    try:
+        _sent_paths = json.loads(request.form.get("_paths", "[]"))
+    except Exception:
+        pass
+
+    all_entries = []
+    used_paths = set()
+    for idx, f in enumerate(files):
+        # 优先使用前端传入的路径（支持拖拽/目录选择/特殊符号文件名）
+        rel_path = _sent_paths[idx] if idx < len(_sent_paths) else f.filename
+        if not rel_path or not rel_path.lower().endswith(".txt"):
+            continue
+        raw = f.read()
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                content = raw.decode("gbk", errors="replace")
+            except Exception:
+                continue
+        entries = _parse_txt_with_index(content, rel_path)
+        all_entries.extend(entries)
+        used_paths.add(rel_path)
+
+    if not all_entries:
+        return jsonify({"error": "未解析到有效条目"}), 400
+
+    groups = {}
+    for e in all_entries:
+        groups.setdefault(e["original"], []).append(e)
+
+    duplicate_groups = {k: v for k, v in groups.items() if len(v) > 1}
+
+    return jsonify({
+        "entries": all_entries,
+        "groups": duplicate_groups,
+        "total_entries": len(all_entries),
+        "total_groups": len(duplicate_groups),
+        "files": sorted(used_paths),
+    })
+
+
+@app.route("/api/dedup/evaluate-batch", methods=["POST"])
+def dedup_evaluate_batch():
+    """批量并发评估多个重复组，流式 NDJSON 返回每组 best_index"""
+    data = request.get_json(silent=True) or {}
+    groups_list = data.get("groups", [])
+    if not groups_list:
+        return jsonify({"error": "重复组列表为空"}), 400
+
+    concurrency = max(1, min(data.get("concurrency", DEDUP_DEFAULT_CONCURRENCY), 10))
+    api_config = _extract_api_config(data)
+    overrides = _extract_overrides(data)
+
+    strategy = overrides.get("system_prompt") or DEDUP_DEFAULT_STRATEGY
+
+    base_url = api_config.get("api_base") or LLM_API_URL
+    model = api_config.get("model") or LLM_MODEL
+    enable_thinking = api_config.get("enable_thinking")
+
+    valid_items = []
+    for g_idx, group in enumerate(groups_list):
+        if len(group) < 2:
+            continue
+        valid_items.append((g_idx, group))
+
+    def _submit(executor, g_idx, group):
+        def _do():
+            # 构造 prompt：角色指令 + 条目列表 + 明确范围的输出格式
+            entries_text = ""
+            for ei, e in enumerate(group):
+                entries_text += f"{ei+1}. {e['original']}={e['translation']}\n"
+            output_format = f"请只输出 BEST: N 格式（N 为 1 到 {len(group)} 之间的最佳序号），不要任何其他文字。\n例如：BEST: 1"
+            full_prompt = f"{strategy}\n\n{entries_text}\n\n{output_format}"
+
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "你是一个专业的文本质量评估专家。"},
+                    {"role": "user", "content": full_prompt},
+                ],
+                "temperature": overrides.get("temperature", 0.1),
+                "top_p": overrides.get("top_p", 0.6),
+                "max_tokens": overrides.get("max_tokens", 10),
+                "repetition_penalty": overrides.get("repetition_penalty", 1.0),
+                "stream": False,
+            }
+            if enable_thinking is False:
+                payload["thinking"] = {"type": "disabled"}
+            try:
+                resp = _get_session().post(
+                    base_url, json=payload, timeout=LLM_TIMEOUT,
+                    headers=_build_api_headers(api_config),
+                )
+                resp.raise_for_status()
+                rdata = resp.json()
+                content = rdata["choices"][0]["message"]["content"].strip()
+                # 优先匹配 "BEST: N" 格式，回退到取最后一个有效数字
+                best_match = re.search(r"BEST:\s*(\d+)", content, re.IGNORECASE)
+                if best_match:
+                    best_n = int(best_match.group(1))
+                    if 1 <= best_n <= len(group):
+                        return {"best_index": best_n - 1}
+                all_nums = re.findall(r"\b(\d+)\b", content)
+                valid_nums = [int(n) for n in all_nums if 1 <= int(n) <= len(group)]
+                if valid_nums:
+                    return {"best_index": valid_nums[-1] - 1}
+                return {"error": f"无法解析返回: {content}"}
+            except Exception as exc:
+                return {"error": str(exc)}
+        return executor.submit(_do)
+
+    return _stream_batch_response_dedup(valid_items, concurrency, _submit)
+
+
+def _stream_batch_response_dedup(valid_items, concurrency, submit_fn):
+    """去重评估专用流式响应（返回 best_index）"""
+    _sentinel = object()
+    cancel_event = threading.Event()
+
+    def generate():
+        result_queue = queue.Queue()
+
+        def _worker():
+            with ThreadPoolExecutor(max_workers=concurrency) as executor:
+                try:
+                    future_map = {}
+                    for g_idx, group in valid_items:
+                        future = submit_fn(executor, g_idx, group)
+                        future_map[future] = g_idx
+                    for future in as_completed(future_map):
+                        if cancel_event.is_set():
+                            break
+                        g_idx = future_map[future]
+                        try:
+                            result = future.result()
+                        except Exception as exc:
+                            result = {"error": str(exc)}
+                        result_queue.put((g_idx, result))
+                except Exception:
+                    pass
+                finally:
+                    cancel_event.set()
+                    executor.shutdown(wait=False)
+                    _close_session()
+            result_queue.put(_sentinel)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+        try:
+            while True:
+                item = result_queue.get(timeout=LLM_TIMEOUT + 30)
+                if item is _sentinel:
+                    break
+                g_idx, result = item
+                line = json.dumps({
+                    "group_index": g_idx,
+                    "best_index": result.get("best_index"),
+                    "error": result.get("error", ""),
+                }, ensure_ascii=False)
+                yield (line + "\n").encode("utf-8")
+        except (queue.Empty, GeneratorExit):
+            cancel_event.set()
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="application/x-ndjson",
+        direct_passthrough=True,
+        headers={
+            "X-Concurrency": str(concurrency),
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.route("/api/dedup/apply", methods=["POST"])
+def dedup_apply():
+    """应用去重，返回 zip 包含去重后的目录结构 + .bak 文件记录移除条目"""
+    data = request.get_json(silent=True) or {}
+    selected = data.get("selected", [])
+    file_contents = data.get("file_contents", {})
+    if not selected:
+        return jsonify({"error": "未选择任何条目"}), 400
+    if not file_contents:
+        return jsonify({"error": "缺少文件原始内容"}), 400
+    # 防止请求体过大导致 OOM
+    total_size = sum(len(c.encode("utf-8")) for c in file_contents.values())
+    if total_size > 10 * 1024 * 1024:
+        return jsonify({"error": "文件总大小超过 10 MB 限制，请分批处理"}), 413
+
+    # 按文件收集选中行号
+    file_selected = {}
+    for e in selected:
+        fpath = e.get("file")
+        if not fpath:
+            continue
+        file_selected.setdefault(fpath, set()).add(e.get("line"))
+
+    # 构建每个文件的新内容和 bak 内容
+    # bak_files: { relPath: bakText }
+    # new_files: { relPath: newText }
+    new_files = {}
+    bak_files = {}
+
+    for fpath, content in file_contents.items():
+        selected_lines = file_selected.get(fpath, set())
+        lines = content.splitlines()
+        new_lines = []
+        removed_lines = []
+        for idx, line in enumerate(lines):
+            if idx in selected_lines:
+                new_lines.append(line)
+            else:
+                removed_lines.append((idx, line))
+
+        new_files[fpath] = "\n".join(new_lines)
+
+        if removed_lines:
+            bak_parts = []
+            bak_parts.append(f"# ═══ 去重备份 — 来源: {fpath} ═══")
+            bak_parts.append(f"# 移除 {len(removed_lines)} 条重复条目，保留 {len(new_lines)} 条")
+            bak_parts.append("")
+            for idx, line in removed_lines:
+                bak_parts.append(f"# [行{idx}] {line}")
+                bak_parts.append(line)
+            bak_files[fpath] = "\n".join(bak_parts)
+
+    # 打包 zip
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # 去重后的文件
+        for fpath, content in new_files.items():
+            zf.writestr(fpath, content.encode("utf-8"))
+        # bak 文件（放入 bak/ 子目录）
+        for bak_path, content in bak_files.items():
+            zf.writestr("bak/" + bak_path, content.encode("utf-8"))
+
+    buf.seek(0)
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={
+            "Content-Disposition": "attachment; filename=dedup_result.zip",
+            "X-Bak-Count": str(len(bak_files)),
+            "Cache-Control": "no-cache",
+        },
+    )
+
 
 if __name__ == "__main__":
     os.makedirs("static", exist_ok=True)

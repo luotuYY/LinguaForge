@@ -4,6 +4,19 @@
  * Depends on: utils.js, state.js, api.js, render.js
  */
 
+
+import { $, escHtml, showToast, log, naturalCompare, fallbackCopy } from './utils.js';
+import { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, 
+          updateTranslateAllButton, updateRetryButton, updateExportCheckedButton,
+          getLLMParams, getApiConfig } from './state.js';
+import { processFiles } from './api.js';
+import { renderInternal, getCheckedFileNames, renderPreview, renderCompare, updateSearchUI,
+          updateCompareRow, updatePreviewLine, updatePreviewSelectAllVisibility,
+          getCheckedPreviewIndices, getCheckedRows, onPreviewCheck,
+          updateSelectAllPreview, updateSelectAllCompare } from './render.js';
+import { translateOneCore, translateBatchItems,
+          enterTranslatingState, exitTranslatingState,
+          renderFileList } from './api.js';
 // ── Constants ──
 var NL = '\n';
 var _exportGroups = null;
@@ -11,6 +24,7 @@ var _exportGroups = null;
 // ── 页面切换 ──
 var _currentPage = 'translate';
 var _tagInited = false;
+var _dedupInited = false;
 
 function switchPage(page) {
   if (page === _currentPage) return;
@@ -19,8 +33,10 @@ function switchPage(page) {
   // 显示/隐藏页面容器
   var pt = document.getElementById('page-translate');
   var pp = document.getElementById('page-tag');
+  var pd = document.getElementById('page-dedup');
   if (pt) pt.style.display = page === 'translate' ? '' : 'none';
   if (pp) pp.style.display = page === 'tag' ? '' : 'none';
+  if (pd) pd.style.display = page === 'dedup' ? '' : 'none';
 
   // 显示/隐藏工具栏右侧按钮
   var tr = document.getElementById('translateToolbarRight');
@@ -31,8 +47,10 @@ function switchPage(page) {
   // 导航高亮
   var navT = document.getElementById('navTranslate');
   var navG = document.getElementById('navTag');
+  var navD = document.getElementById('navDedup');
   if (navT) navT.className = page === 'translate' ? 'nav-link active' : 'nav-link';
   if (navG) navG.className = page === 'tag' ? 'nav-link active' : 'nav-link';
+  if (navD) navD.className = page === 'dedup' ? 'nav-link active' : 'nav-link';
 
   // 更新 hash（不触发 hashchange）
   if (window.location.hash !== '#' + page) {
@@ -43,6 +61,12 @@ function switchPage(page) {
   if (page === 'tag' && !_tagInited) {
     _tagInited = true;
     tagInit();
+  }
+
+  // 去重页懒初始化
+  if (page === 'dedup' && !_dedupInited) {
+    _dedupInited = true;
+    if (typeof dedupInit === 'function') dedupInit();
   }
 
   // 切换时刷新 LLM 状态
@@ -106,8 +130,9 @@ async function translateOne(index, e) {
   await translateOneCore(index);
   state.translating = false;
   state.abort = false;
-  btn.disabled = false;
-  btn.textContent = '译';
+  // 全量刷新对比表和预览（re-render 后旧 btn 引用可能已 stale）
+  renderPreview();
+  renderCompare();
   $('btnExport').disabled = !state.lines.some(function (l) { return l.new_translation; });
   updateTranslateAllButton();
   updateRetryButton();
@@ -416,7 +441,7 @@ function editTranslation(index, evt) {
   ta.addEventListener('blur', function () { commitEditTA(ta, index); });
   ta.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEditTA(ta, index); }
-    if (e.key === 'Escape') { line.new_translation = orig; ta.remove(); _compareDirty = false; updateCompareRow(index); updatePreviewLine(index); }
+    if (e.key === 'Escape') { line.new_translation = orig; ta.remove(); renderInternal.compareDirty = false; renderPreview(); renderCompare(); }
   });
   ta.addEventListener('input', function () { autoResizeTA(ta); });
 }
@@ -426,7 +451,7 @@ function commitEditTA(ta, index) {
   var line = state.lines[index];
   if (line && val) { line.new_translation = val; line.error = ''; log('[' + (index + 1) + '] 手动编辑'); }
   ta.remove();
-  _compareDirty = false;
+  renderInternal.compareDirty = false;
   updateCompareRow(index);
   updatePreviewLine(index);
 }
@@ -449,10 +474,8 @@ function clearNewWithoutOld() {
     }
   }
   if (affected.length === 0) { showToast('没有可清空的词条'); return; }
-  for (var j = 0; j < affected.length; j++) {
-    updateCompareRow(affected[j]);
-    updatePreviewLine(affected[j]);
-  }
+  renderPreview();
+  renderCompare();
   updateRetryButton();
   $('btnExport').disabled = false;
   log('清空 ' + affected.length + ' 条无旧译文的词条');
@@ -467,8 +490,9 @@ function keepOld(index) {
   line.new_translation = line.translation;
   line.error = '';
   log('[' + (index + 1) + '] 保留原译文');
-  updateCompareRow(index);
-  updatePreviewLine(index);
+  // 全量刷新以避免 DOM 引用变 stale
+  renderPreview();
+  renderCompare();
   updateRetryButton();
   $('btnExport').disabled = false;
 }
@@ -500,10 +524,6 @@ function exportCheckedRows() {
     if (!groups.has(fname)) groups.set(fname, []);
     groups.get(fname).push(l);
   }
-  if (groups.size <= 1) {
-    doExportSingle(groups);
-    return;
-  }
   _exportGroups = groups;
   $('exportOptions').classList.add('visible');
 }
@@ -521,11 +541,12 @@ function exportFile() {
     if (!groups.has(fname)) groups.set(fname, []);
     groups.get(fname).push(l);
   }
+  _exportGroups = groups;
   if (groups.size <= 1) {
-    doExportSingle(groups);
+    // 单文件也显示选择，让用户自行决定
+    $('exportOptions').classList.add('visible');
     return;
   }
-  _exportGroups = groups;
   $('exportOptions').classList.add('visible');
 }
 
@@ -543,6 +564,7 @@ function doExportSingle(groups) {
   triggerDownload(outName, content);
   log('导出: ' + outName + ' (' + groupLines.length + '行)');
   showToast('已导出 ' + outName + ' (' + groupLines.length + '行)');
+  cancelExport();
 }
 
 function exportSeparate() {
@@ -746,3 +768,38 @@ function triggerDownload(filename, fcontent) {
     });
   }
 })();
+
+// ── Module exports ──
+export { switchPage, onPreviewSearch, clearPreviewSearch, onCompareSearch, clearCompareSearch, translateOne, translatePreviewSelected, translateAll, retryFailed, retrySelected, clearAllTranslations, stopTranslate, retryOne, copySelectedRows, deleteSelectedRows, copyRow, editTranslation, commitEditTA, autoResizeTA, clearNewWithoutOld, keepOld, copyOriginal, exportCheckedRows, exportFile, cancelExport, doExportSingle, exportSeparate, exportGrouped, buildFileContent, triggerDownload };
+
+// ── Window bindings (HTML onclick compat) ──
+window.switchPage = switchPage;
+window.onPreviewSearch = onPreviewSearch;
+window.clearPreviewSearch = clearPreviewSearch;
+window.onCompareSearch = onCompareSearch;
+window.clearCompareSearch = clearCompareSearch;
+window.translateOne = translateOne;
+window.translatePreviewSelected = translatePreviewSelected;
+window.translateAll = translateAll;
+window.retryFailed = retryFailed;
+window.retrySelected = retrySelected;
+window.clearAllTranslations = clearAllTranslations;
+window.stopTranslate = stopTranslate;
+window.retryOne = retryOne;
+window.copySelectedRows = copySelectedRows;
+window.deleteSelectedRows = deleteSelectedRows;
+window.copyRow = copyRow;
+window.editTranslation = editTranslation;
+window.commitEditTA = commitEditTA;
+window.autoResizeTA = autoResizeTA;
+window.clearNewWithoutOld = clearNewWithoutOld;
+window.keepOld = keepOld;
+window.copyOriginal = copyOriginal;
+window.exportCheckedRows = exportCheckedRows;
+window.exportFile = exportFile;
+window.cancelExport = cancelExport;
+window.doExportSingle = doExportSingle;
+window.exportSeparate = exportSeparate;
+window.exportGrouped = exportGrouped;
+window.buildFileContent = buildFileContent;
+window.triggerDownload = triggerDownload;

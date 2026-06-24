@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -23,6 +23,7 @@
     <!-- SPA 导航：用 hash 切换 -->
     <a href="#translate" class="nav-link active" id="navTranslate" onclick="switchPage('translate');return false">翻译</a>
     <a href="#tag" class="nav-link" id="navTag" onclick="switchPage('tag');return false">分词</a>
+    <a href="#dedup" class="nav-link" id="navDedup" onclick="switchPage('dedup');return false">去重</a>
     <span id="llmStatus">
       <span class="dot dot-err"></span>
       <span class="status-text">LLM 未连接</span>
@@ -248,13 +249,13 @@
 
     <!-- 控制栏 -->
     <div class="card tag-controls-row">
-      <div class="card-header">🏷️ 分词控制</div>
-      <div class="card-body">
-        <!-- 分类标签可视化（类似翻译页 System Prompt 折叠面板） -->
-        <div style="margin-bottom:10px">
-          <span class="prompt-toggle" id="tagCatToggle" onclick="tagToggleCatPanel()">分类标签 ▼</span>
-          <button class="btn btn-sm" onclick="tagOpenAdmin()" style="margin-left:6px">⚙️ 管理标签</button>
-        </div>
+      <div class="card-header tag-ctrl-header">
+      <span class="tag-ctrl-title">🏷️ 分词控制</span>
+      <span class="prompt-toggle" id="tagCatToggle" onclick="tagToggleCatPanel()">分类标签 ▼</span>
+      <span class="prompt-toggle" id="tagStrategyToggle" onclick="tagToggleStrategy()">分类策略 ▼</span>
+      <button class="btn btn-sm" onclick="tagOpenAdmin()">⚙️ 管理标签</button>
+    </div>
+      <div class="card-body tag-ctrl-body">
         <div id="tagCatPanel" class="tag-cat-panel">
         </div>
         <div class="tag-controls">
@@ -262,12 +263,10 @@
           <button class="btn" id="tagBtnStop" disabled onclick="tagStop()">停止</button>
           <button class="btn" id="tagBtnClear" disabled onclick="tagClearAll()">清除全部</button>
           <button class="btn" id="tagBtnExport" disabled onclick="tagExport()">导出结果</button>
-          <button class="btn" id="tagBtnExportSep" onclick="tagExportSeparate()">按类目分别导出</button>
-          <button class="btn btn-primary" id="tagBtnImport" disabled onclick="tagSendToTranslate()">导入翻译</button>
+          <button class="btn btn-primary" id="tagBtnImport" onclick="tagSendToTranslate()">导入翻译</button>
           <span style="font-size:0.78rem;color:var(--text-muted);margin-left:4px">并发</span>
           <input type="number" id="tagConcurrency" value="5" min="1" max="10" class="param-input" style="width:42px">
           <span id="tagRuntimeDisplay" style="display:none;font-size:0.72rem;color:var(--accent);margin-left:6px;font-variant-numeric:tabular-nums"></span>
-          <span class="prompt-toggle" id="tagStrategyToggle" onclick="tagToggleStrategy()" style="margin-left:8px">分类策略 ▼</span>
         </div>
         <div id="tagStrategyRow" style="display:none;flex-direction:column;gap:6px;margin-top:6px;margin-bottom:4px">
           <div style="font-size:0.72rem;color:var(--text-muted);line-height:1.5;padding:6px 10px;background:rgba(0,0,0,0.15);border-radius:4px;border-left:3px solid var(--accent)">
@@ -307,6 +306,93 @@
 
 </div><!-- /page-tag -->
 
+<!-- ========== 去重页容器 ========== -->
+<div id="page-dedup" class="page-container" style="display:none">
+
+<div class="dedup-grid">
+
+  <!-- 左栏：来源输入 + LLM 评估（垂直） -->
+  <div class="dedup-left">
+
+    <!-- 来源输入 -->
+    <div class="card dedup-upload-card">
+      <div class="card-header">📂 来源输入</div>
+      <div class="card-body">
+        <div class="drop-zone" id="dedupDropZone">
+          <div class="dz-icon">📁</div>
+          <div class="dz-text">拖拽 .txt 文件或文件夹到此处，或点击选择</div>
+          <input type="file" id="dedupFileInput" multiple webkitdirectory>
+        </div>
+        <div class="file-info" id="dedupFileInfo"></div>
+      </div>
+    </div>
+
+    <!-- LLM 评估控制 -->
+    <div class="card dedup-eval-card">
+      <div class="card-header">🔄 LLM 评估</div>
+      <div class="card-body" id="cardDedupEval">
+        <div class="dedup-controls">
+          <button class="btn" id="dedupBtnStop" disabled onclick="dedupStop()">停止</button>
+          <span style="font-size:0.78rem;color:var(--text-muted)">并发</span>
+          <input type="number" id="dedupConcurrency" value="5" min="1" max="10" class="param-input" onchange="saveDedupParams()" style="width:42px">
+          <button class="btn btn-primary" id="dedupBtnStart" disabled onclick="dedupStart()">开始评估</button>
+        </div>
+        <div id="dedupEvalParams">
+        <div class="param-row">
+          <label title="随机性：越低评估越稳定。去重建议低值&#10;双击恢复默认值 0.1" ondblclick="resetParamDefault(this.nextElementSibling)">Temperature</label>
+          <input type="number" id="dedupTemperature" value="0.1" min="0" max="2" step="0.1" class="param-input" onchange="saveDedupParams()">
+          <label title="核采样：限制候选词范围&#10;双击恢复默认值 0.6" ondblclick="resetParamDefault(this.nextElementSibling)">Top P</label>
+          <input type="number" id="dedupTopP" value="0.6" min="0" max="1" step="0.05" class="param-input" onchange="saveDedupParams()">
+          <label title="输出长度上限：去重只需输出序号&#10;双击恢复默认值 10" ondblclick="resetParamDefault(this.nextElementSibling)">Max Tokens</label>
+          <input type="number" id="dedupMaxTokens" value="10" min="1" max="128" class="param-input" onchange="saveDedupParams()">
+          <label title="重复惩罚&#10;双击恢复默认值 1.0" ondblclick="resetParamDefault(this.nextElementSibling)">Rep Penalty</label>
+          <input type="number" id="dedupRepPenalty" value="1.0" min="1" max="2" step="0.05" class="param-input" onchange="saveDedupParams()">
+        </div>
+        </div>
+        <!-- 评估策略（结构化） -->
+        <div style="margin-bottom:6px;text-align:right">
+          <span class="prompt-toggle" id="dedupStrategyToggle" onclick="toggleDedupStrategy()">评估策略 ▼</span>
+        </div>
+        <div id="dedupStrategyRow" style="display:none;flex-direction:column;gap:6px;margin-bottom:8px">
+          <div style="font-size:0.72rem;color:var(--text-muted);line-height:1.5;padding:6px 10px;background:rgba(0,0,0,0.15);border-radius:4px;border-left:3px solid var(--accent)">
+            <div style="font-weight:600;color:var(--text-secondary);margin-bottom:4px">📋 发给 LLM 的完整 prompt 结构：</div>
+            <div><span style="color:var(--accent)">① 角色指令</span>（下方可编辑）</div>
+            <div><span style="color:var(--green)">② 条目列表</span>（每组重复条目的原文+译文，自动生成）</div>
+            <div><span style="color:var(--amber)">③ 输出格式</span>（固定："只输出最佳条目的序号（从0开始的数字），不要任何其他文字。"）</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:0.73rem;color:var(--text-secondary);font-weight:600">① 角色指令</span>
+            <button class="btn btn-sm" onclick="resetDedupStrategy()" title="恢复默认" style="padding:2px 6px;font-size:0.85rem">↻</button>
+          </div>
+          <textarea id="dedupStrategyText" class="prompt-area visible" placeholder="角色指令..." style="width:100%;min-height:60px;resize:vertical;margin-bottom:0;font-size:0.72rem" oninput="saveDedupParams()"></textarea>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar"><div class="progress-fill" id="dedupProgressFill"></div></div>
+          <div class="progress-text" id="dedupProgressText">等待上传</div>
+        </div>
+        <div class="log-area" id="dedupLogArea"></div>
+      </div>
+    </div>
+
+  </div><!-- /dedup-left -->
+
+  <!-- 右栏：重复组列表 -->
+  <div class="card dedup-right">
+    <div class="card-header">
+      <div class="header-left">📊 重复组列表 <span style="font-weight:400;font-size:0.72rem;color:var(--text-muted)">（每组单选保留条目，LLM 评估后自动勾选最优）</span></div>
+      <button class="dedup-nav-btn dedup-filter-off" id="dedupFilterBtn" onclick="_dedupToggleFilter()" title="仅显示译文不同的组（需评估）">🔍 筛选</button>
+      <span style="font-size:0.8rem;color:var(--text-muted)">已发现 <span id="dedupGroupCount">0</span> 组 · 已选 <span id="dedupSelectedCount">0</span> 条</span>
+      <button class="btn btn-primary" id="dedupApplyBtn" disabled onclick="applyDedup()" title="将选中的最佳条目导出为去重后的 zip 文件（含备份）">应用去重</button>
+    </div>
+    <div class="card-body" id="dedupGroups" style="overflow-y:auto;flex:1">
+      <div class="empty-state">上传文件后显示重复组</div>
+    </div>
+  </div>
+
+</div><!-- /dedup-grid -->
+
+</div><!-- /page-dedup -->
+
 <!-- ========== 公共组件（只保留一份） ========== -->
 <div class="toast" id="toast"></div>
 
@@ -321,29 +407,27 @@
   </div>
 </div>
 
-<!-- Scripts: load order matters -->
-<script src="js/particles.js"></script>
-<script src="js/utils.js"></script>
-<script src="js/state.js"></script>
-<script src="js/api.js"></script>
-<script src="js/render.js"></script>
-<script src="js/app.js"></script>
-<script src="js/tag.js"></script>
+<!-- Scripts: ES modules via main.js entry point -->
+<script type="module" src="js/main.js"></script>
 
-<!-- SPA 路由初始化 -->
-<script>
+<!-- SPA 路由初始化 (module) -->
+<script type="module">
+import { switchPage } from './js/app.js';
+
 (function() {
-  // 根据 hash 决定初始页面
   var hash = window.location.hash.replace('#', '');
   if (hash === 'tag') {
     switchPage('tag');
+  } else if (hash === 'dedup') {
+    switchPage('dedup');
   } else {
     switchPage('translate');
   }
-  // 监听浏览器前进后退
   window.addEventListener('hashchange', function() {
     var h = window.location.hash.replace('#', '');
-    switchPage(h === 'tag' ? 'tag' : 'translate');
+    if (h === 'tag') switchPage('tag');
+    else if (h === 'dedup') switchPage('dedup');
+    else switchPage('translate');
   });
 })();
 </script>

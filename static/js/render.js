@@ -3,6 +3,9 @@
  * 预览列表、对比表格的 DOM 渲染，搜索 UI，复选框/排序状态管理
  * Depends on: utils.js, state.js
  */
+
+import { $, escHtml, setHighlight, hl, matches, naturalCompare } from './utils.js';
+import { state } from './state.js';
 // ── 文件过滤 ──
 function getCheckedFileNames() {
   return state.files.filter(function (f) { return f.checked; }).map(function (f) { return f.name; });
@@ -75,7 +78,7 @@ function renderPreview() {
 }
 
 // ── 编辑保护：翻译进行中编辑 textarea 时不重建 DOM ──
-var _compareDirty = false;
+const renderInternal = { compareDirty: false };
 
 // ── 增量更新预览列表单条 ──
 function updatePreviewLine(index) {
@@ -114,12 +117,12 @@ function toggleSort() {
 function renderCompare() {
   // 编辑进行中：跳过重建，标记为待刷新
   if (document.querySelector('.compare-table .inline-edit')) {
-    _compareDirty = true;
+    renderInternal.compareDirty = true;
     return;
   }
   // 批量翻译进行中：禁止全量重建，由 updateCompareRow() 增量处理
   if (_batchUpdating) return;
-  _compareDirty = false;
+  renderInternal.compareDirty = false;
   var q = state.compareQuery;
   setHighlight(q);
   var rows = state.lines.filter(function (l) { return l.new_translation || l.error; });
@@ -435,3 +438,30 @@ function updateCompareRow(index) {
 // ── 批量翻译开始/结束标记（用于增量更新判断） ──
 var _batchUpdating = false;
 function setBatchUpdating(v) { _batchUpdating = v; }
+
+// ── Module exports ──
+export { renderInternal, getCheckedFileNames, updateSearchUI, renderPreview, updatePreviewLine, toggleSort, renderCompare, updatePreviewSelectAllVisibility, onPreviewCheck, toggleSelectAllPreview, updateSelectAllPreview, getCheckedPreviewIndices, onCompareCheck, toggleSelectAllCompare, updateSelectAllCompare, getCheckedRows, onPreviewRowLimitChange, onPreviewCustomLimitChange, initPreviewRowLimit, updateCompareRow, _appendCompareRow, setBatchUpdating };
+
+// ── Window bindings (HTML onclick compat) ──
+window.updateSearchUI = updateSearchUI;
+window.renderPreview = renderPreview;
+window.updatePreviewLine = updatePreviewLine;
+window.toggleSort = toggleSort;
+window.renderCompare = renderCompare;
+window.updatePreviewSelectAllVisibility = updatePreviewSelectAllVisibility;
+window.onPreviewCheck = onPreviewCheck;
+window.toggleSelectAllPreview = toggleSelectAllPreview;
+window.updateSelectAllPreview = updateSelectAllPreview;
+window.getCheckedPreviewIndices = getCheckedPreviewIndices;
+window.onCompareCheck = onCompareCheck;
+window.toggleSelectAllCompare = toggleSelectAllCompare;
+window.updateSelectAllCompare = updateSelectAllCompare;
+window.getCheckedRows = getCheckedRows;
+window.onPreviewRowLimitChange = onPreviewRowLimitChange;
+window.onPreviewCustomLimitChange = onPreviewCustomLimitChange;
+window.initPreviewRowLimit = initPreviewRowLimit;
+window.updateCompareRow = updateCompareRow;
+window._appendCompareRow = _appendCompareRow;
+window.renderInternal = renderInternal;
+window.getCheckedFileNames = getCheckedFileNames;
+window.setBatchUpdating = setBatchUpdating;
