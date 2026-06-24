@@ -1649,3 +1649,101 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   border: 1px solid rgba(255,255,255,0.1);
   color: var(--text-secondary);
 }
+
+/* ═══════════════════════════════════════════════════════
+   分词导出弹窗 (tagExportModal)
+   ═══════════════════════════════════════════════════════ */
+
+#tagExportModal .exp-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+#tagExportModal .exp-title-icon { font-size: 1.1rem; }
+#tagExportModal .exp-hint {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+#tagExportModal .exp-section { margin-bottom: 12px; }
+#tagExportModal .exp-section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+/* radio group card */
+#tagExportModal .exp-radio-group {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+#tagExportModal .exp-radio-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.15s;
+}
+#tagExportModal .exp-radio-item:hover { background: rgba(255,255,255,0.04); }
+#tagExportModal .exp-radio-item + .exp-radio-item {
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+#tagExportModal .exp-radio-text { font-weight: 500; }
+#tagExportModal .exp-radio-hint {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  margin-left: 2px;
+}
+
+/* checkbox inline card */
+#tagExportModal .exp-checkbox-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+#tagExportModal .exp-checkbox-item:hover { background: rgba(255,255,255,0.04); }
+
+/* preview box */
+#tagExportModal .exp-preview-box {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  max-height: 130px;
+  overflow-y: auto;
+  font-family: Consolas, 'Courier New', monospace;
+  line-height: 1.57;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* action row */
+#tagExportModal .exp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}

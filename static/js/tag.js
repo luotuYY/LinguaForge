@@ -873,26 +873,31 @@ function tagExportDialog() {
     modal = document.createElement('div'); modal.id = 'tagExportModal';
     modal.className = 'modal-overlay'; modal.style.display = 'none';
     modal.innerHTML =
-      '<div class="modal-box" style="max-width:420px">' +
-        '<div class="modal-msg" style="font-weight:600;margin-bottom:10px">📤 导出方案 <span style="font-size:0.68rem;font-weight:400;color:var(--text-muted)">（多文件分别导出需浏览器授权自动下载）</span></div>' +
-        '<div style="margin-bottom:10px">' +
-          '<div style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px">导出模式</div>' +
-          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:4px"><input type="radio" name="tagExpMode" value="merge" checked> 合并导出（单个文件）</label>' +
-          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem"><input type="radio" name="tagExpMode" value="separate"> 分别导出（多个文件）</label>' +
+      '<div class="modal-box" style="max-width:440px">' +
+        '<div class="exp-title"><span class="exp-title-icon">📤</span><span>导出方案</span></div>' +
+        '<div class="exp-hint">多文件分别导出需浏览器授权自动下载</div>' +
+        '<div class="exp-section">' +
+          '<div class="exp-section-label">导出模式</div>' +
+          '<div class="exp-radio-group">' +
+            '<label class="exp-radio-item"><input type="radio" name="tagExpMode" value="merge" checked><span class="exp-radio-text">合并导出</span><span class="exp-radio-hint">单个文件</span></label>' +
+            '<label class="exp-radio-item"><input type="radio" name="tagExpMode" value="separate"><span class="exp-radio-text">分别导出</span><span class="exp-radio-hint">多个文件</span></label>' +
+          '</div>' +
         '</div>' +
-        '<div style="margin-bottom:10px">' +
-          '<div style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);margin-bottom:4px">分类粒度</div>' +
-          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;margin-bottom:4px"><input type="radio" name="tagExpGran" value="l1" checked> 一级类目</label>' +
-          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem"><input type="radio" name="tagExpGran" value="l2"> 二级类目</label>' +
+        '<div class="exp-section">' +
+          '<div class="exp-section-label">分类粒度</div>' +
+          '<div class="exp-radio-group">' +
+            '<label class="exp-radio-item"><input type="radio" name="tagExpGran" value="l1" checked><span class="exp-radio-text">一级类目</span></label>' +
+            '<label class="exp-radio-item"><input type="radio" name="tagExpGran" value="l2"><span class="exp-radio-text">二级类目</span></label>' +
+          '</div>' +
         '</div>' +
-        '<div style="margin-bottom:10px">' +
-          '<label style="display:flex;align-items:center;gap:6px;font-size:0.8rem"><input type="checkbox" id="tagExpUntagged" checked> 包含未分类条目</label>' +
+        '<label class="exp-checkbox-item"><input type="checkbox" id="tagExpUntagged" checked><span class="exp-radio-text">包含未分类条目</span></label>' +
+        '<div class="exp-section">' +
+          '<div class="exp-section-label">预览</div>' +
+          '<div class="exp-preview-box" id="tagExportPreview"></div>' +
         '</div>' +
-        '<div id="tagExportPreview" style="font-size:0.7rem;color:var(--text-muted);margin-bottom:10px;max-height:80px;overflow-y:auto"></div>' +
-        '<div class="modal-actions">' +
-          '<span style="flex:1"></span>' +
-          '<button class="btn btn-primary" onclick="tagExportDo()">导出</button>' +
+        '<div class="exp-actions">' +
           '<button class="btn" id="tagExportCancel">取消</button>' +
+          '<button class="btn btn-primary" onclick="tagExportDo()">导出</button>' +
         '</div>' +
       '</div>';
     document.body.appendChild(modal);
@@ -925,15 +930,24 @@ function _tagExportUpdatePreview() {
 
 function prevL1(preview, mode, tagged, incUntagged) {
   var schema = getEnabledSchema(); var lines = [];
+  if (mode === 'separate') {
+    var fileCount = Object.keys(schema).filter(function(k){return tagged.filter(function(l){return l.tag_l1===k;}).length>0;}).length;
+    lines.push('<span style="color:var(--amber);font-weight:500">' + fileCount + ' 个文件</span>');
+  } else {
+    lines.push('<span style="color:var(--accent);font-weight:500">合并为 1 个文件</span>');
+  }
   Object.keys(schema).forEach(function(l1) {
     var cnt = tagged.filter(function(l){return l.tag_l1===l1;}).length;
-    if (cnt > 0) lines.push((mode==='separate'?'📄 ':'  ')+l1+': '+cnt+' 条');
+    if (cnt > 0) {
+      var bullet = mode === 'separate' ? '<span style="color:var(--green-dim)">▸</span> ' : '';
+      lines.push(bullet + '<span style="color:var(--text)">' + escHtml(l1) + '</span> <span style="color:var(--text-muted)">' + cnt + ' 条</span>');
+    }
   });
   if (incUntagged) {
     var u = tagState.lines.filter(function(l){return !l.tag_l1;}).length;
-    if (u>0) lines.push('  未分类: '+u+' 条');
+    if (u > 0) lines.push('<span style="color:var(--text-muted)">  未分类 ' + u + ' 条</span>');
   }
-  preview.textContent = (mode==='merge'?'合并为 1 个文件\n':'分别导出 '+Object.keys(schema).filter(function(k){return tagged.filter(function(l){return l.tag_l1===k;}).length>0;}).length+' 个文件\n') + lines.join('\n');
+  preview.innerHTML = lines.join('<br>');
 }
 
 function prevL2(preview, mode, tagged, incUntagged) {
@@ -943,14 +957,22 @@ function prevL2(preview, mode, tagged, incUntagged) {
     var subs = {}; items.forEach(function(l){ var k = l.tag_l2||'未细分'; if(!subs[k]) subs[k]=0; subs[k]++; });
     var subKeys = Object.keys(subs);
     if (mode==='separate') totalFiles += subKeys.length;
-    lines.push(l1+':');
-    subKeys.forEach(function(l2) { lines.push((mode==='separate'?'  📄 ':'    ')+l2+': '+subs[l2]+' 条'); });
+    if (subKeys.length > 0) {
+      lines.push('<span style="color:var(--text)">' + escHtml(l1) + '</span>');
+      subKeys.forEach(function(l2) {
+        var bullet = mode==='separate' ? '<span style="color:var(--green-dim)">  ▸</span> ' : '    ';
+        lines.push(bullet + '<span style="color:var(--text-secondary)">' + escHtml(l2) + '</span> <span style="color:var(--text-muted)">' + subs[l2] + ' 条</span>');
+      });
+    }
   });
   if (incUntagged) {
     var u = tagState.lines.filter(function(l){return !l.tag_l1;}).length;
-    if (u>0) { lines.push('未分类: '+u+' 条'); if (mode==='separate') totalFiles++; }
+    if (u > 0) { lines.push('<span style="color:var(--text-muted)">  未分类 ' + u + ' 条</span>'); if (mode==='separate') totalFiles++; }
   }
-  preview.textContent = (mode==='merge'?'合并为 1 个文件\n':'分别导出 '+totalFiles+' 个文件\n') + lines.join('\n');
+  if (mode === 'separate') {
+    lines[0] = '<span style="color:var(--amber);font-weight:500">分别导出 ' + totalFiles + ' 个文件</span>';
+  }
+  preview.innerHTML = lines.join('<br>');
 }
 
 function tagExportDo() {
