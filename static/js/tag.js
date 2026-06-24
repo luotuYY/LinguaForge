@@ -1,4 +1,4 @@
-/**
+﻿/**
  * TxtLlmHub - 分词/标签模块
  * 文本分类、LLM 分词、卡片拖拽排序、标签管理、导入翻译
  * Depends on: utils.js($, escHtml, showToast, log)
@@ -1146,20 +1146,24 @@ function tagAdminAddGroup() {
   var list = document.getElementById('tagAdminList');
   var newGroup = document.createElement('div');
   newGroup.className = 'tag-admin-group';
+  newGroup.setAttribute('ondragover', 'tagAdminDragOver(event, this)');
+  newGroup.setAttribute('ondragleave', 'tagAdminDragLeave(event, this)');
+  newGroup.setAttribute('ondrop', 'tagAdminDrop(event, this)');
   newGroup.dataset.l1 = '新类目';
   newGroup.innerHTML = '<div class="tag-admin-group-header">' +
     '<label class="tag-admin-enabled-wrap" title="启用/禁用">' +
-      '<input type="checkbox" class="tag-admin-enabled" checked onchange="this.closest(\'.tag-admin-group\').classList.toggle(\'tag-admin-disabled\', !this.checked)">' +
+      '<input type="checkbox" class="tag-admin-enabled" checked onchange="this.closest(\'.tag-admin-group\').classList.toggle(\'tag-admin-disabled\', !this.checked);_autoSave()">' +
     '</label>' +
-    '<input class="tag-admin-icon" value="📌" style="width:30px;text-align:center">' +
-    '<input class="tag-admin-name" value="新类目" ondblclick="this.readOnly=false;this.focus();this.select()" onblur="this.readOnly=true" readonly style="flex:1">' +
-    '<input class="tag-admin-color" type="color" value="#888888">' +
+    '<input class="tag-admin-icon" value="📌" onchange="_autoSave()" style="width:30px;text-align:center">' +
+    '<input class="tag-admin-name" value="新类目" ondblclick="this.readOnly=false;this.focus();this.select()" onblur="this.readOnly=true;_autoSave()" readonly style="flex:1">' +
+    '<input class="tag-admin-color" type="color" value="#888888" onchange="_autoSave()">' +
     '<button class="btn btn-sm" onclick="tagAdminAddSub(this)">+子项</button>' +
     '<button class="btn btn-sm tag-admin-del-btn" onclick="tagAdminRemoveGroup(this)">🗑</button>' +
   '</div>' +
   '<div class="tag-admin-subs"></div>';
   list.appendChild(newGroup);
   newGroup.querySelector('.tag-admin-name').focus();
+  _autoSave();
 }
 
 function tagAdminRemoveGroup(btn) {
