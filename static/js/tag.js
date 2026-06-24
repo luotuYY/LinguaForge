@@ -740,14 +740,75 @@ function tagDrop(e) {
       showToast('已调整顺序'); _tagDragIdx = -1; return;
     }
   }
+  var oldL1 = line.tag_l1;
   line.tag_l1 = targetL1;
   var dropSchema = getEnabledSchema();
   if (targetL1 && dropSchema[targetL1]) {
-    if (!line.tag_l2 || (dropSchema[line.tag_l1] && dropSchema[line.tag_l1].subs.indexOf(line.tag_l2)===-1))
+    if (!line.tag_l2 || (dropSchema[oldL1] && dropSchema[oldL1].subs.indexOf(line.tag_l2)===-1))
       line.tag_l2 = dropSchema[targetL1].subs[0] || '';
   } else { line.tag_l1 = ''; line.tag_l2 = ''; }
+  // If moving to a different L1 that has subs, re-tag via LLM
+  if (targetL1 && targetL1 !== oldL1 && dropSchema[targetL1] && dropSchema[targetL1].subs.length > 0) {
+    _tagRetagOnDrop(line, targetL1);
+  }
   tagRenderColumns(); tagRenderPreview();
   showToast('已移至 ' + (targetL1 || '未分类')); _tagDragIdx = -1;
+}
+
+
+// ── 拖拽跨L1重新分词 ──
+async function _tagRetagOnDrop(line, targetL1) {
+  var schema = getEnabledSchema();
+  var cat = schema[targetL1];
+  if (!cat || !cat.subs.length) return;
+
+  // Mark as re-tagging (visual feedback)
+  line._retagging = true;
+  tagUpdateOneCard(line);
+
+  var strategyText = (
+    document.getElementById('tagStrategyText') &&
+    document.getElementById('tagStrategyText').value.trim()
+  ) || '\u4f60\u662f\u4e00\u4e2a\u6e38\u620f\u6587\u672c\u5206\u7c7b\u4e13\u5bb6\u3002\u8bf7\u5c06\u4ee5\u4e0b\u6587\u672c\u5f52\u5165\u6700\u5408\u9002\u7684\u7c7b\u522b\u3002';
+
+  var subsDesc = cat.subs.join(', ');
+  var prompt = strategyText + '\n\n\u8be5\u6761\u76ee\u5df2\u786e\u5b9a\u5c5e\u4e8e"' + targetL1 + '"\u7c7b\u522b\u3002\u8bf7\u5c06\u5176\u5f52\u5165\u4ee5\u4e0b\u5b50\u7c7b\u4e4b\u4e00:\n' + subsDesc + '\n\n\u8bf7\u4e25\u683c\u8f93\u51faJSON:{"tag_l1":"' + targetL1 + '","tag_l2":"\u5b50\u7c7b\u540d\u79f0","confidence":0.0~1.0}\n\u53ea\u8f93\u51faJSON\u3002';
+
+  try {
+    var apiConfig = tagGetApiConfig();
+    var body = Object.assign({
+      items: [{ original: line.original }],
+      concurrency: 1,
+      system_prompt: prompt,
+    }, apiConfig);
+
+    var r = await fetch('/api/tag-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!r.ok) return;
+
+    var text = await r.text();
+    var lines = text.trim().split('\n');
+    // Parse the last valid result line
+    for (var li = lines.length - 1; li >= 0; li--) {
+      var t = lines[li].trim(); if (!t) continue;
+      try {
+        var res = JSON.parse(t);
+        if (res.tag_l2 && cat.subs.indexOf(res.tag_l2) !== -1) {
+          line.tag_l2 = res.tag_l2;
+          line.confidence = res.confidence || 0;
+          break;
+        }
+      } catch (e) {}
+    }
+  } catch (e) {
+    // silent - keep default L2
+  }
+  line._retagging = false;
+  tagUpdateOneCard(line);
 }
 
 // ── 编辑卡片分类 ──
