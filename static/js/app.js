@@ -574,21 +574,17 @@ function exportSeparate() {
   if (!groups) return;
   var entries = Array.from(groups.entries());
   var totalLines = 0;
-  function downloadNext(i) {
-    if (i >= entries.length) {
-      log('分别导出: ' + entries.length + ' 个文件, ' + totalLines + '行');
-      showToast('已分别导出 ' + entries.length + ' 个文件');
-      cancelExport();
-      return;
-    }
+  // 在同一次用户手势中同步触发所有下载（浏览器限制：异步回调中的下载会被拦截）
+  for (var i = 0; i < entries.length; i++) {
     var fname = entries[i][0];
     var groupLines = entries[i][1];
     var content = buildFileContent(groupLines);
     triggerDownload(fname + '.retranslated.txt', content);
     totalLines += groupLines.length;
-    setTimeout(function () { downloadNext(i + 1); }, 250);
   }
-  downloadNext(0);
+  log('分别导出: ' + entries.length + ' 个文件, ' + totalLines + '行');
+  showToast('已分别导出 ' + entries.length + ' 个文件');
+  cancelExport();
 }
 
 function exportGrouped() {
@@ -631,7 +627,8 @@ function triggerDownload(filename, fcontent) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  // 延后释放 blob URL，避免浏览器尚未启动下载就被回收
+  setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
 }
 
 // ── 网格拖拽调整 ──
