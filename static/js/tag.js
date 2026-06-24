@@ -421,18 +421,193 @@ function tagRenderCard(l) {
 }
 
 
+// ── 导入弹窗 ──
+function tagImportDialog() {
+  var tagged = tagState.lines.filter(function(l){return l.tag_l1;});
+  if (tagged.length===0) { showToast('没有已分类的词条'); return; }
+
+  var modal = document.getElementById('tagImportModal');
+  if (!modal) {
+    modal = document.createElement('div'); modal.id = 'tagImportModal';
+    modal.className = 'modal-overlay'; modal.style.display = 'none';
+    modal.innerHTML =
+      '<div class="modal-box" style="max-width:440px">' +
+        '<div class="exp-title"><span class="exp-title-icon">\u{1f4e5}</span><span>\u5bfc\u5165\u65b9\u6848</span></div>' +
+        '<div class="exp-hint">\u5c06\u5206\u8bcd\u7ed3\u679c\u5bfc\u5165\u5230\u7ffb\u8bd1\u9875\uff0c\u81ea\u52a8\u53bb\u91cd</div>' +
+        '<div class="exp-section">' +
+          '<div class="exp-section-label">\u5bfc\u5165\u6a21\u5f0f</div>' +
+          '<div class="exp-radio-group">' +
+            '<label class="exp-radio-item"><input type="radio" name="tagImpMode" value="merge" checked><span class="exp-radio-text">\u5408\u5e76\u5bfc\u5165</span><span class="exp-radio-hint">\u5408\u4e3a\u4e00\u4e2a\u865a\u62df\u6587\u4ef6</span></label>' +
+            '<label class="exp-radio-item"><input type="radio" name="tagImpMode" value="separate"><span class="exp-radio-text">\u5206\u522b\u5bfc\u5165</span><span class="exp-radio-hint">\u6bcf\u4e2a\u5206\u7c7b\u72ec\u7acb\u6587\u4ef6</span></label>' +
+          '</div>' +
+        '</div>' +
+        '<div class="exp-section">' +
+          '<div class="exp-section-label">\u5206\u7c7b\u7c92\u5ea6</div>' +
+          '<div class="exp-radio-group">' +
+            '<label class="exp-radio-item"><input type="radio" name="tagImpGran" value="l1" checked><span class="exp-radio-text">\u4e00\u7ea7\u7c7b\u76ee</span></label>' +
+            '<label class="exp-radio-item"><input type="radio" name="tagImpGran" value="l2"><span class="exp-radio-text">\u4e8c\u7ea7\u7c7b\u76ee</span></label>' +
+          '</div>' +
+        '</div>' +
+        '<label class="exp-checkbox-item"><input type="checkbox" id="tagImpUntagged" checked><span class="exp-radio-text">\u5305\u542b\u672a\u5206\u7c7b\u6761\u76ee</span></label>' +
+        '<div class="exp-section">' +
+          '<div class="exp-section-label">\u9884\u89c8</div>' +
+          '<div class="exp-preview-box" id="tagImportPreview"></div>' +
+        '</div>' +
+        '<div class="exp-actions">' +
+          '<button class="btn" id="tagImportCancel">\u53d6\u6d88</button>' +
+          '<button class="btn btn-primary" onclick="tagImportDo()">\u5bfc\u5165</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) modal.style.display = 'none'; });
+    document.getElementById('tagImportCancel').onclick = function() { modal.style.display = 'none'; };
+
+    modal.querySelectorAll('input[name="tagImpMode"], input[name="tagImpGran"], #tagImpUntagged').forEach(function(el) {
+      el.addEventListener('change', _tagImportUpdatePreview);
+    });
+  }
+
+  modal.style.display = 'flex';
+  _tagImportUpdatePreview();
+}
+
+function _tagImportUpdatePreview() {
+  var preview = document.getElementById('tagImportPreview'); if (!preview) return;
+  var mode = (document.querySelector('input[name="tagImpMode"]:checked') || {}).value || 'merge';
+  var gran = (document.querySelector('input[name="tagImpGran"]:checked') || {}).value || 'l1';
+  var incUntagged = document.getElementById('tagImpUntagged').checked;
+  var tagged = tagState.lines.filter(function(l){return l.tag_l1;});
+
+  // Count duplicates
+  var existingOriginals = new Set();
+  if (typeof state !== 'undefined') state.lines.forEach(function(l) { existingOriginals.add(l.original); });
+
+  if (gran === 'l2') {
+    _tagImpPrevL2(preview, mode, tagged, incUntagged, existingOriginals);
+  } else {
+    _tagImpPrevL1(preview, mode, tagged, incUntagged, existingOriginals);
+  }
+}
+
+function _tagImpPrevL1(preview, mode, tagged, incUntagged, existingOriginals) {
+  var schema = getEnabledSchema(); var lines = []; var totalNew = 0;
+  if (mode === 'separate') {
+    var fileCount = Object.keys(schema).filter(function(k){return tagged.filter(function(l){return l.tag_l1===k;}).length>0;}).length;
+    lines.push('<span style="color:var(--amber);font-weight:500">\u5206\u522b\u5bfc\u5165 ' + fileCount + ' \u4e2a\u865a\u62df\u6587\u4ef6</span>');
+  } else {
+    lines.push('<span style="color:var(--accent);font-weight:500">\u5408\u5e76\u5bfc\u5165\u4e3a 1 \u4e2a\u865a\u62df\u6587\u4ef6</span>');
+  }
+  Object.keys(schema).forEach(function(l1) {
+    var items = tagged.filter(function(l){return l.tag_l1===l1;});
+    if (items.length===0) return;
+    var nw = items.filter(function(l){return !existingOriginals.has(l.original);}).length;
+    var dup = items.length - nw;
+    totalNew += nw;
+    var bullet = mode==='separate' ? '<span style="color:var(--green-dim)">\u25b8</span> ' : '';
+    lines.push(bullet + '<span style="color:var(--text)">' + escHtml(l1) + '</span> <span style="color:var(--text-muted)">' + items.length + ' \u6761</span>' + (dup>0?' <span style="color:var(--red-dim)">(-'+dup+' \u91cd\u590d)</span>':''));
+  });
+  if (incUntagged) {
+    var u = tagState.lines.filter(function(l){return !l.tag_l1;});
+    if (u.length>0) {
+      var nwu = u.filter(function(l){return !existingOriginals.has(l.original);}).length;
+      var dupu = u.length - nwu;
+      totalNew += nwu;
+      lines.push('<span style="color:var(--text-muted)">  \u672a\u5206\u7c7b ' + u.length + ' \u6761</span>' + (dupu>0?' <span style="color:var(--red-dim)">(-'+dupu+' \u91cd\u590d)</span>':''));
+    }
+  }
+  lines.push('');
+  lines.push('<span style="color:var(--green)">\u2714 \u5b9e\u9645\u5bfc\u5165 ' + totalNew + ' \u6761\uff08\u5df2\u53bb\u91cd\uff09</span>');
+  preview.innerHTML = lines.join('<br>');
+}
+
+function _tagImpPrevL2(preview, mode, tagged, incUntagged, existingOriginals) {
+  var schema = getEnabledSchema(); var totalFiles = 0; var lines = []; var totalNew = 0;
+  Object.keys(schema).forEach(function(l1) {
+    var items = tagged.filter(function(l){return l.tag_l1===l1;});
+    if (items.length===0) return;
+    var subs = {}; items.forEach(function(l){ var k = l.tag_l2||'\u672a\u7ec6\u5206'; if(!subs[k]) subs[k]=[]; subs[k].push(l); });
+    var subKeys = Object.keys(subs);
+    if (mode==='separate') totalFiles += subKeys.length;
+    lines.push('<span style="color:var(--text)">' + escHtml(l1) + '</span>');
+    subKeys.forEach(function(l2) {
+      var subItems = subs[l2];
+      var nw = subItems.filter(function(l){return !existingOriginals.has(l.original);}).length;
+      var dup = subItems.length - nw;
+      totalNew += nw;
+      var bullet = mode==='separate' ? '<span style="color:var(--green-dim)">  \u25b8</span> ' : '    ';
+      lines.push(bullet + '<span style="color:var(--text-secondary)">' + escHtml(l2) + '</span> <span style="color:var(--text-muted)">' + subItems.length + ' \u6761</span>' + (dup>0?' <span style="color:var(--red-dim)">(-'+dup+' \u91cd\u590d)</span>':''));
+    });
+  });
+  if (incUntagged) {
+    var u = tagState.lines.filter(function(l){return !l.tag_l1;});
+    if (u.length>0) {
+      var nwu = u.filter(function(l){return !existingOriginals.has(l.original);}).length;
+      var dupu = u.length - nwu;
+      totalNew += nwu;
+      if (mode==='separate') totalFiles++;
+      lines.push('<span style="color:var(--text-muted)">  \u672a\u5206\u7c7b ' + u.length + ' \u6761</span>' + (dupu>0?' <span style="color:var(--red-dim)">(-'+dupu+' \u91cd\u590d)</span>':''));
+    }
+  }
+  if (mode === 'separate') {
+    lines.unshift('<span style="color:var(--amber);font-weight:500">\u5206\u522b\u5bfc\u5165 ' + totalFiles + ' \u4e2a\u865a\u62df\u6587\u4ef6</span>');
+  } else {
+    lines.unshift('<span style="color:var(--accent);font-weight:500">\u5408\u5e76\u5bfc\u5165\u4e3a 1 \u4e2a\u865a\u62df\u6587\u4ef6</span>');
+  }
+  lines.push('');
+  lines.push('<span style="color:var(--green)">\u2714 \u5b9e\u9645\u5bfc\u5165 ' + totalNew + ' \u6761\uff08\u5df2\u53bb\u91cd\uff09</span>');
+  preview.innerHTML = lines.join('<br>');
+}
+
+function tagImportDo() {
+  var mode = (document.querySelector('input[name="tagImpMode"]:checked') || {}).value || 'merge';
+  var gran = (document.querySelector('input[name="tagImpGran"]:checked') || {}).value || 'l1';
+  var incUntagged = document.getElementById('tagImpUntagged').checked;
+  var modal = document.getElementById('tagImportModal');
+  modal.style.display = 'none';
+  tagSendToTranslate(mode, gran, incUntagged);
+}
+
+
 // ── 导入到翻译页(按分类分组,去重) ──
-function tagSendToTranslate() {
-  var selectedLines = tagState.lines.filter(function(l){ return l.tag_l1; });
-  if (selectedLines.length === 0) { showToast('没有已分类的条目可导入'); return; }
+function tagSendToTranslate(mode, gran, incUntagged) {
+  mode = mode || 'merge'; gran = gran || 'l1'; incUntagged = incUntagged !== false;
   if (typeof state === 'undefined') { showToast('翻译页未初始化'); return; }
 
-  // 按 tag_l1 分组
+  var selectedLines = [];
+  var tagged = tagState.lines.filter(function(l){ return l.tag_l1; });
+  if (gran === 'l2') {
+    // L2: group by l1+l2
+    var schema = getEnabledSchema();
+    Object.keys(schema).forEach(function(l1) {
+      var items = tagged.filter(function(l){return l.tag_l1===l1;});
+      var subs = {}; items.forEach(function(l){ var k = l.tag_l2||'未细分'; if(!subs[k]) subs[k]=[]; subs[k].push(l); });
+      Object.keys(subs).forEach(function(l2) {
+        selectedLines.push({ key: l1 + ' / ' + l2, lines: subs[l2] });
+      });
+    });
+    if (incUntagged) {
+      var u = tagState.lines.filter(function(l){return !l.tag_l1;});
+      if (u.length > 0) selectedLines.push({ key: '未分类', lines: u });
+    }
+  } else {
+    // L1: group by l1
+    Object.keys(getEnabledSchema()).forEach(function(l1) {
+      var items = tagged.filter(function(l){return l.tag_l1===l1;});
+      if (items.length > 0) selectedLines.push({ key: l1, lines: items });
+    });
+    if (incUntagged) {
+      var u2 = tagState.lines.filter(function(l){return !l.tag_l1;});
+      if (u2.length > 0) selectedLines.push({ key: '未分类', lines: u2 });
+    }
+  }
+  if (selectedLines.length === 0) { showToast('没有已分类的条目可导入'); return; }
+
+  // Build groups
   var groups = {};
-  selectedLines.forEach(function(l) {
-    var key = l.tag_l1 || '未分类';
+  selectedLines.forEach(function(grp) {
+    var key = mode === 'merge' ? 'tag_导入' : 'tag_' + grp.key;
     if (!groups[key]) groups[key] = [];
-    groups[key].push(l);
+    grp.lines.forEach(function(l) { groups[key].push(l); });
   });
 
   // 去重:收集翻译页已有的 original 集合

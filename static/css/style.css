@@ -1654,7 +1654,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
    分词导出弹窗 (tagExportModal)
    ═══════════════════════════════════════════════════════ */
 
-#tagExportModal .exp-title {
+#tagExportModal .exp-title, #tagImportModal .exp-title {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1663,16 +1663,16 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   color: var(--text);
   margin-bottom: 4px;
 }
-#tagExportModal .exp-title-icon { font-size: 1.1rem; }
-#tagExportModal .exp-hint {
+#tagExportModal .exp-title-icon, #tagImportModal .exp-title-icon { font-size: 1.1rem; }
+#tagExportModal .exp-hint, #tagImportModal .exp-hint {
   font-size: 0.68rem;
   color: var(--text-muted);
   margin-bottom: 14px;
   line-height: 1.4;
 }
 
-#tagExportModal .exp-section { margin-bottom: 12px; }
-#tagExportModal .exp-section-label {
+#tagExportModal .exp-section, #tagImportModal .exp-section { margin-bottom: 12px; }
+#tagExportModal .exp-section-label, #tagImportModal .exp-section-label {
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--text-secondary);
@@ -1682,13 +1682,13 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 }
 
 /* radio group card */
-#tagExportModal .exp-radio-group {
+#tagExportModal .exp-radio-group, #tagImportModal .exp-radio-group {
   background: rgba(255,255,255,0.025);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-sm);
   overflow: hidden;
 }
-#tagExportModal .exp-radio-item {
+#tagExportModal .exp-radio-item, #tagImportModal .exp-radio-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1697,19 +1697,19 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   font-size: 0.8rem;
   transition: background 0.15s;
 }
-#tagExportModal .exp-radio-item:hover { background: rgba(255,255,255,0.04); }
-#tagExportModal .exp-radio-item + .exp-radio-item {
+#tagExportModal .exp-radio-item:hover, #tagImportModal .exp-radio-item:hover { background: rgba(255,255,255,0.04); }
+#tagExportModal .exp-radio-item + .exp-radio-item, #tagImportModal .exp-radio-item + .exp-radio-item {
   border-top: 1px solid rgba(255,255,255,0.05);
 }
-#tagExportModal .exp-radio-text { font-weight: 500; }
-#tagExportModal .exp-radio-hint {
+#tagExportModal .exp-radio-text, #tagImportModal .exp-radio-text { font-weight: 500; }
+#tagExportModal .exp-radio-hint, #tagImportModal .exp-radio-hint {
   color: var(--text-muted);
   font-size: 0.7rem;
   margin-left: 2px;
 }
 
 /* checkbox inline card */
-#tagExportModal .exp-checkbox-item {
+#tagExportModal .exp-checkbox-item, #tagImportModal .exp-checkbox-item {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1722,10 +1722,10 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   border-radius: var(--radius-sm);
   transition: background 0.15s;
 }
-#tagExportModal .exp-checkbox-item:hover { background: rgba(255,255,255,0.04); }
+#tagExportModal .exp-checkbox-item:hover, #tagImportModal .exp-checkbox-item:hover { background: rgba(255,255,255,0.04); }
 
 /* preview box */
-#tagExportModal .exp-preview-box {
+#tagExportModal .exp-preview-box, #tagImportModal .exp-preview-box {
   background: rgba(0,0,0,0.25);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--radius-sm);
@@ -1741,7 +1741,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 }
 
 /* action row */
-#tagExportModal .exp-actions {
+#tagExportModal .exp-actions, #tagImportModal .exp-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
