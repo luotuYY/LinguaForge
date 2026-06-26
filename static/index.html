@@ -252,11 +252,11 @@
           <button class="btn" id="tagBtnImport">导入翻译</button>
           <span style="font-size:0.78rem;color:var(--text-muted);margin-left:4px;cursor:pointer" title="同时发送的分类请求数。越大越快，但可能触发限流&#10;推荐 3~5&#10;双击恢复默认">并发</span>
           <input type="number" id="tagConcurrency" value="5" min="1" max="10" class="param-input" style="width:42px">
-          <span style="font-size:0.72rem;color:var(--text-muted);margin-left:8px;cursor:pointer" title="分类的随机性。越低分类越稳定、越一致&#10;分词建议低温度 0.1，保证每次分类结果一致&#10;双击恢复默认">Temp</span>
+          <span style="font-size:0.72rem;color:var(--text-muted);margin-left:8px;cursor:pointer" title="分类的随机性。越低分类越稳定、越一致&#10;分词建议低温度 0.1，保证每次分类结果一致&#10;双击恢复默认">Temperature</span>
           <input type="number" id="tagTemperature" value="0.1" min="0" max="2" step="0.1" class="param-input" style="width:48px">
           <span style="font-size:0.72rem;color:var(--text-muted);margin-left:4px;cursor:pointer" title="核采样：限制候选词范围&#10;分词场景影响极小，保持默认即可&#10;双击恢复默认">Top P</span>
           <input type="number" id="tagTopP" value="0.6" min="0" max="1" step="0.05" class="param-input" style="width:48px">
-          <span style="font-size:0.72rem;color:var(--text-muted);margin-left:4px;cursor:pointer" title="最大输出 token 数。分词只需输出类别 JSON，512 足够&#10;双击恢复默认">Max</span>
+          <span style="font-size:0.72rem;color:var(--text-muted);margin-left:4px;cursor:pointer" title="最大输出 token 数。分词只需输出类别 JSON，512 足够&#10;双击恢复默认">Max Tokens</span>
           <input type="number" id="tagMaxTokens" value="512" min="1" max="4096" class="param-input" style="width:52px">
           <span id="tagRuntimeDisplay" style="display:none;font-size:0.72rem;color:var(--accent);margin-left:6px;font-variant-numeric:tabular-nums"></span>
         </div>
