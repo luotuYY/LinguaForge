@@ -2333,23 +2333,26 @@ function tagInit() {
 
   // LLM 参数持久化
   var tagLLMParams = dbGet('tllmh_tag_params', {});
-  ['tagTemperature', 'tagTopP', 'tagMaxTokens'].forEach(function(id) {
-    var el = document.getElementById(id);
+  var tagParamMap = [
+    { id: 'tagTemperature', key: 'temperature', def: '0.1' },
+    { id: 'tagTopP', key: 'top_p', def: '0.6' },
+    { id: 'tagMaxTokens', key: 'max_tokens', def: '512' },
+  ];
+  tagParamMap.forEach(function(cfg) {
+    var el = document.getElementById(cfg.id);
     if (!el) return;
-    var key = id.replace('tag', '').toLowerCase();
-    if (tagLLMParams[key] != null) el.value = tagLLMParams[key];
+    if (tagLLMParams[cfg.key] != null) el.value = tagLLMParams[cfg.key];
     el.addEventListener('blur', function() {
       var p = dbGet('tllmh_tag_params', {});
-      p[key] = el.value;
+      p[cfg.key] = el.value;
       dbSet('tllmh_tag_params', p);
     });
     el.addEventListener('dblclick', function() {
-      var defaults = { temperature: '0.1', topp: '0.6', maxtokens: '512' };
-      if (defaults[key]) el.value = defaults[key];
+      el.value = cfg.def;
       if (window.getSelection) window.getSelection().removeAllRanges();
       el.blur();
       var p = dbGet('tllmh_tag_params', {});
-      p[key] = el.value;
+      p[cfg.key] = el.value;
       dbSet('tllmh_tag_params', p);
     });
   });

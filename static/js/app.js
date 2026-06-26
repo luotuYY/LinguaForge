@@ -768,6 +768,15 @@ function triggerDownload(filename, fcontent) {
       input.addEventListener('dblclick', function() { resetParamDefault(input); });
     });
   }
+  // 翻译页并发数双击重置（不在 .param-row 内）
+  var concurrencyEl = document.getElementById('concurrency');
+  if (concurrencyEl) {
+    concurrencyEl.addEventListener('dblclick', function() {
+      concurrencyEl.value = '5';
+      if (window.getSelection) window.getSelection().removeAllRanges();
+      concurrencyEl.blur();
+    });
+  }
 
   // ── 翻译页：提示词管理 ──
   _bind('promptTitle', 'focus', onTitleFocus);
