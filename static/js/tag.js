@@ -1614,7 +1614,7 @@ function tagOpenAdmin() {
   availablePool.forEach(function(name) {
     poolHtml +=
       '<div class="tag-admin-pool-chip" draggable="true"' +
-        ' data-action="tag-admin-pool-chip"' +
+        ' data-action="tag-admin-pool-chip">' +
         '<span class="tag-admin-pool-text">' + escHtml(name) + '</span>' +
         '<span class="tag-admin-pool-del" data-action="tag-admin-del-pool-item" title="永久删除">&times;</span>' +
       '</div>';
