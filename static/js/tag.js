@@ -426,6 +426,8 @@ function tagUpdateOneCard(line) {
       if (newCard2) newCard2.setAttribute('data-l1', expectedL1);
     }
   }
+  // 实时更新列头计数
+  tagUpdateCounts();
 }
 
 // ── 列头计数更新 ──
