@@ -468,16 +468,8 @@ function _appendCardToColumn(l1, line) {
     if (existingPg) existingPg.remove();
     colEl.insertAdjacentHTML('afterend', _renderColPagination(colId, totalCards, perPage));
     _bindColPagination(column);
-    // 新增栏：跳到最后一页（新卡片在末尾）；未分类栏：保持当前页
-    var totalPages = Math.ceil(totalCards / perPage);
+    // 保持当前页，不自动跳转
     var curPage = tagState.colPages[colId] || 1;
-    if (!l1 && curPage < totalPages) {
-      // 未分类栏：保持当前页不跳（回补逻辑保证当前页有内容）
-    } else if (l1) {
-      // 分类栏：新卡片在最后一页
-      tagState.colPages[colId] = totalPages;
-      curPage = totalPages;
-    }
     _applyColPageVisibility(colEl, curPage, perPage);
   }
 }
@@ -535,7 +527,7 @@ function _initTagCounts() {
 
 function _tagBumpCount(oldL1, newL1) {
   var c = tagState._tagCounts;
-  if (!c) { _initTagCounts(); c = tagState._tagCounts; }
+  if (!c) return; // 未初始化时跳过（由 _initTagCounts 在 tagRenderColumns 中完成）
   oldL1 = oldL1 || '__untagged';
   newL1 = newL1 || '__untagged';
   if (oldL1 !== newL1) {
@@ -547,7 +539,6 @@ function _tagBumpCount(oldL1, newL1) {
 function tagUpdateCounts() {
   var schema = getEnabledSchema();
   var c = tagState._tagCounts;
-  if (!c) { _initTagCounts(); c = tagState._tagCounts; }
   if (!c) return;
   Object.keys(schema).forEach(function(l1) {
     var el = document.getElementById('cnt-' + l1);
@@ -1086,6 +1077,8 @@ async function tagStart() {
     pending = tagState.lines.slice();
   }
   if (pending.length === 0) { showToast('没有待分词的条目'); return; }
+  // 确保计数缓存已初始化（流式过程中 _tagBumpCount 依赖它）
+  if (!tagState._tagCounts) _initTagCounts();
 
   var concurrency = parseInt(document.getElementById('tagConcurrency').value) || 5;
 
