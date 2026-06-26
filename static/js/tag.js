@@ -327,7 +327,6 @@ function tagRenderColumns() {
       '<div class="tag-column-body" data-l1="' + l1 + '" ' +
       'data-action="tag-column-body">';
     shown.forEach(function(l) { html += tagRenderCard(l); });
-    if (items.length > perPage) html += '<div class="tag-column-empty">…还有 ' + (items.length - shown.length) + ' 条</div>';
     if (items.length === 0) html += '<div class="tag-column-empty">拖入词条或运行分词</div>';
     html += '</div></div>';
   });
@@ -341,7 +340,6 @@ function tagRenderColumns() {
     '<div class="tag-column-body" data-l1="" ' +
     'data-action="tag-column-body">';
   unShown.forEach(function(l) { html += tagRenderCard(l); });
-  if (untagged.length > perPage) html += '<div class="tag-column-empty">…还有 ' + (untagged.length - unShown.length) + ' 条</div>';
   if (untagged.length === 0 && tagState.lines.length > 0) html += '<div class="tag-column-empty">所有词条已分类 ✓</div>';
   html += '</div></div>';
   container.innerHTML = html;
