@@ -378,11 +378,10 @@ function _bindColPagination(colEl) {
 
 // ── 增量更新单张卡片(分词进行时不重建整个列) ──
 function tagUpdateOneCard(line) {
-  // Schema 校验：防止无效的 tag_l1（如 LLM 错把二级类目当一级）流入渲染
+  // Schema 校验
   if (line.tag_l1) {
     var _schema = getEnabledSchema();
     if (!_schema[line.tag_l1]) {
-      // l1 不在 schema 中，尝试从子类反查
       var _found = null;
       Object.keys(_schema).forEach(function(k) {
         if (_schema[k].subs.indexOf(line.tag_l1) >= 0) _found = k;
@@ -395,7 +394,6 @@ function tagUpdateOneCard(line) {
         line.tag_l2 = '';
         line.confidence = 0;
       }
-      _tagBumpCount(line.tag_l1 || '', line.tag_l1);
     }
   }
   var oldCard = document.querySelector('.tag-card[data-index="' + line.index + '"]');
@@ -404,54 +402,74 @@ function tagUpdateOneCard(line) {
   var expectedL1 = line.tag_l1 || '';
 
   if (oldCard) {
-    // 更新内容
-    oldCard.style.borderLeftColor = bc;
-    var tagEl = oldCard.querySelector('.tag-card-tag');
-    if (tagEl) tagEl.innerHTML = line.tag_l2
-      ? escHtml(line.tag_l2) + (line.confidence > 0 ? ' <span class="tag-confidence">' + Math.round(line.confidence*100) + '%</span>' : '')
-      : '<span style="color:var(--text-muted)">未标注</span>' + (line.confidence > 0 ? ' <span class="tag-confidence">' + Math.round(line.confidence*100) + '%</span>' : '');
-
-    // 用 data-l1 属性判断卡片是否在正确栏(比 parentBody 更可靠)
     var cardL1 = oldCard.getAttribute('data-l1') || '';
     if (cardL1 !== expectedL1) {
-      // 需要移动
+      // ── 卡片需要移动到新栏 ──
       var srcBody = oldCard.closest('.tag-column-body');
       oldCard.remove();
       // 源栏变空时恢复空状态提示
       if (srcBody && srcBody.querySelectorAll('.tag-card').length === 0) {
-        var srcL1 = srcBody.dataset.l1 || '';
-        var emptyMsg = (!srcL1 && tagState.lines.filter(function(l){return !l.tag_l1;}).length === 0 && tagState.lines.length > 0)
+        var srcL1v = srcBody.dataset.l1 || '';
+        var emptyMsg = (!srcL1v && tagState.lines.filter(function(l){return !l.tag_l1;}).length === 0 && tagState.lines.length > 0)
           ? '所有词条已分类 ✓' : '拖入词条或运行分词';
         srcBody.insertAdjacentHTML('beforeend', '<div class="tag-column-empty">' + emptyMsg + '</div>');
       }
-      // 插入目标栏
-      var targetBody = document.querySelector('.tag-column-body[data-l1="' + expectedL1 + '"]');
-      if (targetBody) {
-        var empty = targetBody.querySelector('.tag-column-empty');
-        if (empty) empty.remove();
-        targetBody.insertAdjacentHTML('beforeend', tagRenderCard(line));
-        // 更新新卡片的 data-l1
-        var newCard = targetBody.querySelector('.tag-card[data-index="' + line.index + '"]');
-        if (newCard) newCard.setAttribute('data-l1', expectedL1);
+      // 未分类栏：移除卡片后从池中回补，保持渲染数量
+      if (!cardL1) {
+        _backfillUntagged();
       }
+      // 追加到目标栏末尾
+      _appendCardToColumn(expectedL1, line);
       _tagBumpCount(cardL1, expectedL1);
     } else {
-      // 已在正确栏,更新 data-l1 以防万一
+      // 已在正确栏，仅更新样式
+      oldCard.style.borderLeftColor = bc;
+      var tagEl = oldCard.querySelector('.tag-card-tag');
+      if (tagEl) tagEl.innerHTML = line.tag_l2
+        ? escHtml(line.tag_l2) + (line.confidence > 0 ? ' <span class="tag-confidence">' + Math.round(line.confidence*100) + '%</span>' : '')
+        : '<span style="color:var(--text-muted)">未标注</span>' + (line.confidence > 0 ? ' <span class="tag-confidence">' + Math.round(line.confidence*100) + '%</span>' : '');
       oldCard.setAttribute('data-l1', expectedL1);
     }
   } else {
-    // 新卡片,追加到目标栏(优先目标栏,而非固定追加到未分类)
-    var targetBody2 = document.querySelector('.tag-column-body[data-l1="' + expectedL1 + '"]');
-    if (targetBody2) {
-      var empty2 = targetBody2.querySelector('.tag-column-empty');
-      if (empty2) empty2.remove();
-      targetBody2.insertAdjacentHTML('beforeend', tagRenderCard(line));
-      var newCard2 = targetBody2.querySelector('.tag-card[data-index="' + line.index + '"]');
-      if (newCard2) newCard2.setAttribute('data-l1', expectedL1);
+    // 新卡片，追加到目标栏
+    _appendCardToColumn(expectedL1, line);
+  }
+  tagUpdateCounts();
+}
+
+// ── 追加卡片到指定栏 ──
+function _appendCardToColumn(l1, line) {
+  var body = document.querySelector('.tag-column-body[data-l1="' + (l1 || '') + '"]');
+  if (!body) return;
+  var empty = body.querySelector('.tag-column-empty');
+  if (empty) empty.remove();
+  body.insertAdjacentHTML('beforeend', tagRenderCard(line));
+  var newCard = body.querySelector('.tag-card[data-index="' + line.index + '"]');
+  if (newCard) newCard.setAttribute('data-l1', l1 || '');
+}
+
+// ── 未分类栏回补：从池中取下一个未显示的未分类条目补入 ──
+function _backfillUntagged() {
+  var body = document.querySelector('.tag-column-body[data-l1=""]');
+  if (!body) return;
+  var perPage = tagState.previewRowLimit || 200;
+  var shown = body.querySelectorAll('.tag-card');
+  if (shown.length >= perPage) return;
+  // 收集当前已显示的 index
+  var shownIdx = new Set();
+  shown.forEach(function(c) { shownIdx.add(parseInt(c.dataset.index)); });
+  // 找下一个未分类且未显示的条目
+  for (var i = 0; i < tagState.lines.length; i++) {
+    var l = tagState.lines[i];
+    if (!l.tag_l1 && !shownIdx.has(l.index)) {
+      var empty = body.querySelector('.tag-column-empty');
+      if (empty) empty.remove();
+      body.insertAdjacentHTML('beforeend', tagRenderCard(l));
+      var card = body.querySelector('.tag-card[data-index="' + l.index + '"]');
+      if (card) card.setAttribute('data-l1', '');
+      if (shown.length + 1 >= perPage) break;
     }
   }
-  // 实时更新列头计数
-  tagUpdateCounts();
 }
 
 // ── 列头计数更新 ──
