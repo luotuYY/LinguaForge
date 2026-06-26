@@ -378,6 +378,8 @@ async function checkLLM() {
 
 // ── Default Parameter Loading ──
 async function loadDefaults() {
+  // 等待 IndexedDB 就绪，避免缓存为空时误写默认值覆盖用户数据
+  await dbReady;
   try {
     var r = await fetch('/api/config');
     var d = await r.json();

@@ -5,7 +5,7 @@
 import { $, escHtml, showToast } from './utils.js';
 import { _renderPagination } from './render.js';
 import { state, getApiConfig, resetDedupParamDefault } from './state.js';
-import { dbGet, dbSet } from './db.js';
+import { dbGet, dbSet, dbReady } from './db.js';
 
 var dedupState = {
     entries: [],
@@ -853,8 +853,9 @@ function setupParams() {
     loadDedupParams();
 }
 
-function init() {
+async function init() {
     setupUpload();
+    await dbReady;
     setupParams();
     // 日志区准备就绪（初始隐藏）
     var la = $("dedupLogArea");

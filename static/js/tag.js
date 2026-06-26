@@ -5,7 +5,7 @@
  */
 
 import { $, escHtml, showToast, log, logChunk, setHighlight, hl, matches } from './utils.js';
-import { dbGet, dbSet, dbSetCache, dbHas } from './db.js';
+import { dbGet, dbSet, dbSetCache, dbHas, dbReady } from './db.js';
 import { state, rebuildIndicesAndCheckboxes, updateTranslateAllButton } from './state.js';
 import { renderFileList } from './api.js';
 import { renderPreview, renderCompare, _renderPagination, _bindPagination } from './render.js';
@@ -2307,7 +2307,8 @@ function _adminImport() {
 }
 
 // ── 初始化(由 switchPage 懒调用,只执行一次) ──
-function tagInit() {
+async function tagInit() {
+  await dbReady;
   // 绑定拖拽上传
   var dz = document.getElementById('tagDropZone');
   var fi = document.getElementById('tagFileInput');
