@@ -19,8 +19,7 @@ import { renderInternal, getCheckedFileNames, renderPreview, renderCompare, upda
           getCheckedPreviewIndices, getCheckedRows, onPreviewCheck, onCompareCheck,
           updateSelectAllPreview, updateSelectAllCompare, toggleSelectAllCompare, toggleSelectAllPreview } from './render.js';
 import { setProvider, setMode, saveModeParams, saveApiConfig, testApiConnection,
-          onThinkingChange, togglePrompt, resetSystemPrompt,
-          togglePolishStrategy, savePolishStrategy, resetPolishStrategy,
+          onThinkingChange, togglePrompt, resetSystemPrompt, savePolishStrategy,
           onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt,
           exportPrompts, importPrompts, resetParamDefault } from './state.js';
 import { onPreviewRowLimitChange, onPreviewCustomLimitChange, initPreviewRowLimit, toggleSort } from './render.js';
@@ -746,7 +745,6 @@ function triggerDownload(filename, fcontent) {
   _bind('btnLocal', 'click', function() { setProvider('local'); });
   _bind('btnCommercial', 'click', function() { setProvider('commercial'); });
   _bind('promptToggle', 'click', togglePrompt);
-  _bind('polishStrategyToggle', 'click', togglePolishStrategy);
   _bind('btnSavePrompt', 'click', savePrompt);
 
   // ── 翻译页：参数输入 ──
@@ -786,15 +784,8 @@ function triggerDownload(filename, fcontent) {
     if (txt === '导出') btn.addEventListener('click', exportPrompts);
     if (txt === '导入') btn.addEventListener('click', importPrompts);
   });
-  // promptToggle 和 resetSystemPrompt 按钮紧邻
-  var pt = $('promptToggle');
-  if (pt && pt.nextElementSibling && pt.nextElementSibling.textContent.trim() === '↻') {
-    pt.nextElementSibling.addEventListener('click', resetSystemPrompt);
-  }
-  var pst = $('polishStrategyToggle');
-  if (pst && pst.nextElementSibling && pst.nextElementSibling.textContent.trim() === '↻') {
-    pst.nextElementSibling.addEventListener('click', resetPolishStrategy);
-  }
+  _bind('btnResetPrompt', 'click', resetSystemPrompt);
+
 
   // ── 翻译页：来源输入 ──
   var dropZone = $('dropZone');

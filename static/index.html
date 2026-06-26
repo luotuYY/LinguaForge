@@ -164,8 +164,7 @@
         <input type="number" id="max_tokens" value="1024" min="1" max="4096" class="param-input">
         <label title="重复惩罚：越高越避免重复用词，但过高可能导致用词不自然。&#10;取 1=不惩罚，1.05=轻微惩罚，1.2=明显惩罚&#10;双击恢复默认值 1.05">Rep Penalty</label>
         <input type="number" id="repetition_penalty" value="1.05" min="1" max="2" step="0.05" class="param-input">
-        <span class="prompt-toggle" id="promptToggle" title="展开/折叠翻译提示词">翻译提示词 ▼</span><button class="btn btn-sm" title="恢复当前模式的默认提示词" style="padding:2px 6px;font-size:0.85rem;margin-left:4px">↻</button>
-        <span class="prompt-toggle" id="polishStrategyToggle" title="展开/折叠润色提示词（第二步：对比润色）" style="display:none;margin-left:8px">润色提示词 ▼</span><button class="btn btn-sm" title="恢复默认润色提示词" style="padding:2px 6px;font-size:0.85rem;margin-left:4px;display:none" id="btnResetPolishStrategy">↻</button>
+        <span class="prompt-toggle" id="promptToggle" title="展开/折叠提示词">翻译提示词 ▼</span><button class="btn btn-sm" id="btnResetPrompt" title="恢复当前模式的默认提示词" style="padding:2px 6px;font-size:0.85rem;margin-left:4px">↻</button>
       </div>
       <div id="promptRow" style="display:none;flex-direction:column;gap:6px;margin-bottom:8px">
         <textarea class="prompt-area visible" id="system_prompt" placeholder="System prompt..." style="width:100%;min-height:70px;resize:vertical;margin-bottom:0"></textarea>
@@ -178,9 +177,10 @@
           <button class="btn btn-sm" title="导出所有自定义提示词" style="flex-shrink:0;font-size:0.68rem">📤</button>
           <button class="btn btn-sm" title="导入提示词" style="flex-shrink:0;font-size:0.68rem">📥</button>
         </div>
-      </div>
-      <div id="polishStrategyRow" style="display:none;flex-direction:column;gap:6px;margin-bottom:8px">
-        <textarea class="prompt-area visible" id="polish_strategy" placeholder="润色策略（Step2：对比糅合提示词）..." style="width:100%;min-height:70px;resize:vertical;margin-bottom:0"></textarea>
+        <div id="polishStep2Section" style="display:none;flex-direction:column;gap:4px">
+          <div style="font-size:0.72rem;color:var(--text-muted)">润色策略（Step2：对比糅合提示词）</div>
+          <textarea class="prompt-area visible" id="polish_strategy" placeholder="润色策略..." style="width:100%;min-height:60px;resize:vertical;margin-bottom:0"></textarea>
+        </div>
       </div>
       <div class="progress-wrap">
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>

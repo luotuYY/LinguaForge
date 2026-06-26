@@ -142,16 +142,13 @@ function loadModeParams(mode) {
     $('repetition_penalty').value = def.repetition_penalty;
     $('system_prompt').value = def.system_prompt;
   }
-  // 润色策略 Step2 textarea
-  var psRow = $('polishStrategyRow');
-  var psToggle = $('polishStrategyToggle');
-  var psResetBtn = $('btnResetPolishStrategy');
-  // 根据模式更新按钮文案
+  // 润色模式：显示 Step2 区域
+  var psSection = $('polishStep2Section');
   var promptToggle = $('promptToggle');
   if (promptToggle) {
     if (mode === 'polish') {
-      promptToggle.textContent = promptToggle.textContent.indexOf('▲') >= 0 ? '底稿提示词 ▲' : '底稿提示词 ▼';
-      promptToggle.title = '展开/折叠底稿提示词（润色第一步：直译底稿）';
+      promptToggle.textContent = promptToggle.textContent.indexOf('▲') >= 0 ? '提示词 ▲' : '提示词 ▼';
+      promptToggle.title = '展开/折叠提示词（底稿 + 润色策略）';
     } else {
       promptToggle.textContent = promptToggle.textContent.indexOf('▲') >= 0 ? '翻译提示词 ▲' : '翻译提示词 ▼';
       promptToggle.title = '展开/折叠翻译提示词';
@@ -160,12 +157,9 @@ function loadModeParams(mode) {
   if (mode === 'polish') {
     var psTa = $('polish_strategy');
     if (psTa) psTa.value = getPolishStep2Prompt();
-    if (psToggle) psToggle.style.display = '';
-    if (psResetBtn) psResetBtn.style.display = '';
+    if (psSection) psSection.style.display = 'flex';
   } else {
-    if (psRow) psRow.style.display = 'none';
-    if (psToggle) { psToggle.style.display = 'none'; psToggle.textContent = '润色策略 ▼'; }
-    if (psResetBtn) psResetBtn.style.display = 'none';
+    if (psSection) psSection.style.display = 'none';
   }
 }
 
@@ -214,13 +208,9 @@ async function setMode(mode) {
   state.translateMode = mode;
   dbSet('tllmh_mode', mode);
   loadModeParams(mode);
-  var toggle = $('polishStrategyToggle');
-  if (toggle) {
-    toggle.style.display = mode === 'polish' ? '' : 'none';
-    toggle.textContent = '润色提示词 ▼';
-  }
-  var psRow = $('polishStrategyRow');
-  if (psRow && mode !== 'polish') psRow.style.display = 'none';
+  // 润色模式：Step2 区域显隐
+  var psSection = $('polishStep2Section');
+  if (psSection) psSection.style.display = mode === 'polish' ? 'flex' : 'none';
   if ($('promptRow').style.display === 'flex') renderSavedPrompts();
   var d = document.getElementById('btnModeDirect');
   var p = document.getElementById('btnModePolish');
@@ -409,30 +399,9 @@ async function loadDefaults() {
 }
 
 // ── 润色策略控制（Step2 提示词，仅润色模式可见） ──
-function togglePolishStrategy() {
-  var row = $('polishStrategyRow');
-  var toggle = $('polishStrategyToggle');
-  if (row.style.display === 'flex') {
-    row.style.display = 'none';
-    toggle.textContent = '润色提示词 ▼';
-  } else {
-    row.style.display = 'flex';
-    toggle.textContent = '润色提示词 ▲';
-  }
-}
-
 function savePolishStrategy() {
   var ta = $('polish_strategy');
   if (ta) setPolishStep2Prompt(ta.value);
-}
-
-function resetPolishStrategy() {
-  var ta = $('polish_strategy');
-  if (ta) {
-    ta.value = POLISH_STEP2_DEFAULT;
-    setPolishStep2Prompt(POLISH_STEP2_DEFAULT);
-  }
-  showToast('已恢复默认润色提示词');
 }
 
 // ── 提示词模板管理 ──
@@ -563,7 +532,7 @@ function resetSystemPrompt() {
   var mode = state.translateMode;
   var defaults = mode === 'polish' ? POLISH_DIRECT_DEFAULT : DIRECT_DEFAULT;
   $('system_prompt').value = defaults;
-  // 润色模式同时重置 Step2 为默认值
+  // 润色模式同时重置 Step2
   if (mode === 'polish') {
     setPolishStep2Prompt(POLISH_STEP2_DEFAULT);
     var psTa = $('polish_strategy');
@@ -757,4 +726,4 @@ document.addEventListener('visibilitychange', function () {
 });
 
 // ── Module exports ──
-export { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, DIRECT_DEFAULT, POLISH_DIRECT_DEFAULT, POLISH_STEP2_DEFAULT, getPolishStep2Prompt, setPolishStep2Prompt, resetParamDefault, saveModeParams, loadModeParams, getLLMParams, setMode, updateTranslateAllButton, getApiConfig, loadApiConfig, saveApiConfig, testApiConnection, setProvider, onThinkingChange, checkLLM, loadDefaults, togglePolishStrategy, savePolishStrategy, resetPolishStrategy, showPromptBar, onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt, renderSavedPrompts, togglePrompt, resetSystemPrompt, exportPrompts, importPrompts, updateManualBtn, updateRetryButton, updateExportCheckedButton, promptKey };
+export { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, DIRECT_DEFAULT, POLISH_DIRECT_DEFAULT, POLISH_STEP2_DEFAULT, getPolishStep2Prompt, setPolishStep2Prompt, resetParamDefault, saveModeParams, loadModeParams, getLLMParams, setMode, updateTranslateAllButton, getApiConfig, loadApiConfig, saveApiConfig, testApiConnection, setProvider, onThinkingChange, checkLLM, loadDefaults, savePolishStrategy, showPromptBar, onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt, renderSavedPrompts, togglePrompt, resetSystemPrompt, exportPrompts, importPrompts, updateManualBtn, updateRetryButton, updateExportCheckedButton, promptKey };
