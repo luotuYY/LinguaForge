@@ -756,12 +756,20 @@ function tagDrop(e, t) {
   if (_tagDragIdx < 0) return;
   var line = tagState.lines[_tagDragIdx]; if (!line) return;
   var targetCard = e.target.closest('.tag-card');
+  // Determine insert position: before or after target card based on mouse Y
+  var insertBefore = false;
+  if (targetCard) {
+    var rect = targetCard.getBoundingClientRect();
+    insertBefore = (e.clientY < rect.top + rect.height / 2);
+  }
   if (targetCard && parseInt(targetCard.dataset.index) !== _tagDragIdx) {
     var tIdx = parseInt(targetCard.dataset.index);
     var tLine = tagState.lines[tIdx];
     if (tLine && line.tag_l1 === tLine.tag_l1) {
+      // Same L1: reorder
       tagState.lines.splice(_tagDragIdx, 1);
       var ni = tagState.lines.indexOf(tLine);
+      if (!insertBefore) ni++;
       tagState.lines.splice(ni, 0, line);
       tagState.lines.forEach(function(l,i){l.index=i;});
       tagRenderColumns(); tagRenderPreview();
@@ -776,6 +784,18 @@ function tagDrop(e, t) {
       line.tag_l2 = dropSchema[targetL1].subs[0] || '';
   } else { line.tag_l1 = ''; line.tag_l2 = ''; }
   _tagBumpCount(oldL1, line.tag_l1);
+  // Cross-L1: insert at position or append
+  if (targetCard && parseInt(targetCard.dataset.index) !== _tagDragIdx) {
+    var tIdx2 = parseInt(targetCard.dataset.index);
+    var tLine2 = tagState.lines[tIdx2];
+    if (tLine2) {
+      tagState.lines.splice(_tagDragIdx, 1);
+      var ni2 = tagState.lines.indexOf(tLine2);
+      if (!insertBefore) ni2++;
+      tagState.lines.splice(ni2, 0, line);
+      tagState.lines.forEach(function(l,i){l.index=i;});
+    }
+  }
   // If moving to a different L1 that has subs, re-tag via LLM
   if (targetL1 && targetL1 !== oldL1 && dropSchema[targetL1] && dropSchema[targetL1].subs.length > 0) {
     _tagRetagOnDrop(line, targetL1);
@@ -1718,7 +1738,33 @@ function tagAdminDrop(e, group) {
   if (!name) return;
   var isSub = e.dataTransfer.getData('source') === 'sub';
   
-  // 不允许在同一类目内重复
+  // Find target sub-wrap under mouse for position-aware insertion
+  var targetWrap = e.target.closest('.tag-admin-sub-wrap');
+  var subsDiv = group.querySelector('.tag-admin-subs');
+  
+  // Same-group reorder: if the dragged item is already in this group, just move it
+  if (isSub) {
+    var existingInGroup = null;
+    group.querySelectorAll('.tag-admin-sub-wrap').forEach(function(wrap) {
+      var inp = wrap.querySelector('.tag-admin-sub');
+      if (inp && (inp.value || inp.defaultValue || '').trim() === name) existingInGroup = wrap;
+    });
+    if (existingInGroup) {
+      // Reorder within same group
+      if (targetWrap && targetWrap !== existingInGroup) {
+        var rect = targetWrap.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) {
+          subsDiv.insertBefore(existingInGroup, targetWrap);
+        } else {
+          subsDiv.insertBefore(existingInGroup, targetWrap.nextSibling);
+        }
+        _adminPreview();
+      }
+      return;
+    }
+  }
+  
+  // Cross-group: check duplicates
   var existingSubs = group.querySelectorAll('.tag-admin-sub');
   for (var i = 0; i < existingSubs.length; i++) {
     if ((existingSubs[i].value || existingSubs[i].defaultValue || '').trim() === name) {
@@ -1727,7 +1773,7 @@ function tagAdminDrop(e, group) {
   }
   
   if (isSub) {
-    // 左侧子项拖动: 从源类目中移除
+    // Remove from source group
     var allWraps = document.querySelectorAll('.tag-admin-sub-wrap');
     allWraps.forEach(function(wrap) {
       var input = wrap.querySelector('.tag-admin-sub');
@@ -1735,20 +1781,29 @@ function tagAdminDrop(e, group) {
       if (subName === name) { wrap.remove(); }
     });
   } else {
-    // 池子拖动: 从池中移除
+    // Remove from pool
     var pool = getSubPool(); var idx = pool.indexOf(name);
     if (idx !== -1) { pool.splice(idx, 1); saveSubPool(pool); }
     else return;
   }
   
-  // 添加到目标类目
+  // Create and insert at position
   var subHtml = '<span class="tag-admin-sub-wrap" draggable="true"' +
     ' data-action="tag-admin-sub">' +
     '<input class="tag-admin-sub" value="' + escHtml(name) + '" data-action="make-editable" data-lock="save" readonly>' +
     '<span class="tag-admin-sub-del" data-action="tag-admin-remove-sub" title="移回二级池">&times;</span>' +
   '</span>';
-  var subsDiv = group.querySelector('.tag-admin-subs');
-  var temp = document.createElement('div'); temp.innerHTML = subHtml; subsDiv.appendChild(temp.firstElementChild);
+  var temp = document.createElement('div'); temp.innerHTML = subHtml; var newEl = temp.firstElementChild;
+  if (targetWrap && targetWrap.parentElement === subsDiv) {
+    var rect = targetWrap.getBoundingClientRect();
+    if (e.clientY < rect.top + rect.height / 2) {
+      subsDiv.insertBefore(newEl, targetWrap);
+    } else {
+      subsDiv.insertBefore(newEl, targetWrap.nextSibling);
+    }
+  } else {
+    subsDiv.appendChild(newEl);
+  }
   _refreshPool();
   _adminPreview();
 }
