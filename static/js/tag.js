@@ -297,12 +297,26 @@ function tagRenderColumns() {
   });
   // 校验后每次渲染都重建计数缓存（与渲染本身 O(n) 相比开销可忽略）
   _initTagCounts();
+  // 计算各列实际条目数，用于分页条
+  var colCounts = {};
+  var maxColItems = 0;
+  Object.keys(schema).forEach(function(l1) {
+    var cnt = tagState.lines.filter(function(l) { return l.tag_l1 === l1; }).length;
+    colCounts[l1] = cnt;
+    if (cnt > maxColItems) maxColItems = cnt;
+  });
+  var untaggedCount = tagState.lines.filter(function(l) { return !l.tag_l1; }).length;
+  if (untaggedCount > maxColItems) maxColItems = untaggedCount;
+
+  // 修正 colPage 不超过最大列的实际页数
+  var maxTotalPages = Math.max(1, Math.ceil(maxColItems / perPage));
+  if (colPage > maxTotalPages) colPage = maxTotalPages;
+  tagState.columnsPage = colPage;
+
   var html = '';
   Object.keys(schema).forEach(function(l1) {
     var cat = schema[l1];
     var items = tagState.lines.filter(function(l) { return l.tag_l1 === l1; });
-    var totalPages = Math.max(1, Math.ceil(items.length / perPage));
-    if (colPage > totalPages) colPage = totalPages;
     var cs = (colPage - 1) * perPage;
     var shown = items.slice(cs, cs + perPage);
     html += '<div class="tag-column" data-l1="' + l1 + '">' +
@@ -318,11 +332,8 @@ function tagRenderColumns() {
     html += '</div></div>';
   });
   var untagged = tagState.lines.filter(function(l) { return !l.tag_l1; });
-  var untaggedLimit = tagState.previewRowLimit || 200;
-  var uTotalPages = Math.max(1, Math.ceil(untagged.length / untaggedLimit));
-  var uPage = colPage > uTotalPages ? uTotalPages : colPage;
-  var us = (uPage - 1) * untaggedLimit;
-  var unShown = untagged.slice(us, us + untaggedLimit);
+  var ucs = (colPage - 1) * perPage;
+  var unShown = untagged.slice(ucs, ucs + perPage);
   html += '<div class="tag-column tag-column-untagged">' +
     '<div class="tag-column-header" style="border-left:3px solid #888">' +
     '<span class="tag-col-icon">📋</span><span class="tag-col-title">未分类</span>' +
@@ -330,7 +341,7 @@ function tagRenderColumns() {
     '<div class="tag-column-body" data-l1="" ' +
     'data-action="tag-column-body">';
   unShown.forEach(function(l) { html += tagRenderCard(l); });
-  if (untagged.length > untaggedLimit) html += '<div class="tag-column-empty">…还有 ' + (untagged.length - unShown.length) + ' 条</div>';
+  if (untagged.length > perPage) html += '<div class="tag-column-empty">…还有 ' + (untagged.length - unShown.length) + ' 条</div>';
   if (untagged.length === 0 && tagState.lines.length > 0) html += '<div class="tag-column-empty">所有词条已分类 ✓</div>';
   html += '</div></div>';
   container.innerHTML = html;
@@ -338,10 +349,9 @@ function tagRenderColumns() {
   var parent = container.parentElement;
   var oldPg = parent.querySelector('.pagination-bar');
   if (oldPg) oldPg.remove();
-  // 分页控件（插入到 columns 容器之后、card-body 内）
-  var totalItems = tagState.lines.length;
-  if (totalItems > perPage) {
-    container.insertAdjacentHTML('afterend', _renderPagination(totalItems, perPage, colPage, 'tag-columns'));
+  // 分页控件：按最长列的条目数计算总页数
+  if (maxColItems > perPage) {
+    container.insertAdjacentHTML('afterend', _renderPagination(maxColItems, perPage, colPage, 'tag-columns'));
     _bindPagination(parent.id, 'tag-columns', {
       onPage: function(p) { tagState.columnsPage = p; tagRenderColumns(); },
       onRowsPerPage: function(v) { tagState.previewRowLimit = v; tagState.previewPage = 1; tagState.columnsPage = 1; tagRenderPreview(); tagRenderColumns(); }
