@@ -1579,7 +1579,7 @@ function tagOpenAdmin() {
     var cat = schema[l1];
     var disabledCls = cat.enabled === false ? ' tag-admin-disabled' : '';
     leftHtml +=
-      '<div class="tag-admin-group"' + disabledCls + '" data-l1="' + escHtml(l1) + '"' +
+      '<div class="tag-admin-group' + disabledCls + '" data-l1="' + escHtml(l1) + '"' +
         ' data-action="tag-admin-group">' +
         '<div class="tag-admin-group-header">' +
           '<label class="tag-admin-enabled-wrap" title="启用/禁用">' +
@@ -1687,7 +1687,7 @@ function tagAdminRemoveGroup(btn) {
   saveSubPool(pool);
   group.remove();
   _refreshPool();
-  
+  _adminPreview();
 }
 
 
@@ -1697,6 +1697,7 @@ function tagAdminRemoveSub(el) {
   var name = (input.value || input.defaultValue || '').trim();
   el.parentElement.remove();
   if (name) { var pool = getSubPool(); if (pool.indexOf(name) === -1) { pool.push(name); saveSubPool(pool); } _refreshPool(); }
+  _adminPreview();
 }
 
 // ── 池子拖拽事件 ──
@@ -1749,7 +1750,7 @@ function tagAdminDrop(e, group) {
   var subsDiv = group.querySelector('.tag-admin-subs');
   var temp = document.createElement('div'); temp.innerHTML = subHtml; subsDiv.appendChild(temp.firstElementChild);
   _refreshPool();
-  
+  _adminPreview();
 }
 
 // ── 池子双击编辑 ──
@@ -1785,7 +1786,7 @@ function tagAdminDeletePoolItem(e, el) {
   var pool = getSubPool(); var idx = pool.indexOf(name); if (idx !== -1) { pool.splice(idx, 1); saveSubPool(pool); }
   chip.remove();
   if (document.querySelectorAll('.tag-admin-pool-chip').length === 0) _refreshPool();
-  
+  _adminPreview();
 }
 
 // ── 添加新条目到池子 ──
@@ -1801,6 +1802,7 @@ function tagAdminAddToPool() {
   pool.push(name); saveSubPool(pool);
   input.value = '';
   _refreshPool();
+  _adminPreview();
   input.focus();
 }
 
@@ -1832,7 +1834,7 @@ function tagAdminPoolDrop(e) {
   var pool = getSubPool();
   if (pool.indexOf(name) === -1) { pool.push(name); saveSubPool(pool); }
   _refreshPool();
-  
+  _adminPreview();
 }
 
 // ── 刷新右侧池子 DOM ──
@@ -1858,6 +1860,28 @@ function _refreshPool() {
 }
 
 // ── 自动保存(静默, 不关闭弹窗) ──
+function _adminPreview() {
+  // Read current admin DOM state and re-render columns without saving to DB
+  var newSchema = {};
+  var groups = document.querySelectorAll('.tag-admin-group');
+  groups.forEach(function(group) {
+    var nameInput = group.querySelector('.tag-admin-name');
+    var l1 = nameInput ? (nameInput.value || nameInput.defaultValue || '').trim() : '';
+    var color = group.querySelector('.tag-admin-color'); var colorVal = color ? color.value : '#888';
+    var icon = group.querySelector('.tag-admin-icon'); var iconVal = icon ? (icon.value || icon.defaultValue || '📌') : '📌';
+    var enabled = group.querySelector('.tag-admin-enabled'); var enabledVal = enabled ? enabled.checked : true;
+    var subs = [];
+    group.querySelectorAll('.tag-admin-sub').forEach(function(subInput) { var val = (subInput.value || subInput.defaultValue || '').trim(); if (val) subs.push(val); });
+    if (l1) { newSchema[l1] = { color: colorVal, icon: iconVal, subs: subs.length > 0 ? subs : ['未分类'], enabled: enabledVal }; }
+  });
+  // Temporarily override the schema in cache for rendering
+  dbSet('tllmh_tag_schema', newSchema);
+  var poolChips = document.querySelectorAll('.tag-admin-pool-chip'); var newPool = [];
+  poolChips.forEach(function(chip) { var txt = chip.querySelector('.tag-admin-pool-text'); if (txt) newPool.push(txt.textContent.trim()); });
+  saveSubPool(newPool);
+  tagRenderColumns(); tagRenderPreview(); tagRenderCatPanel(); tagBtnState();
+}
+
 function _autoSave() {
   var newSchema = {};
   var groups = document.querySelectorAll('.tag-admin-group');
@@ -2068,9 +2092,12 @@ function tagInit() {
       if (!el) return;
       var action = el.dataset.action;
       if (action === 'tag-edit-select-change') tagEditSelectChange();
-      else if (action === 'admin-toggle-group') {
-        var group = el.closest('.tag-admin-group');
-        if (group) group.classList.toggle('tag-admin-disabled', !el.checked);
+      else if (action === 'auto-save' || action === 'admin-toggle-group') {
+        if (action === 'admin-toggle-group') {
+          var group = el.closest('.tag-admin-group');
+          if (group) group.classList.toggle('tag-admin-disabled', !el.checked);
+        }
+        _adminPreview();
       }
     });
     tagPage.addEventListener('blur', function(e) {
@@ -2078,6 +2105,11 @@ function tagInit() {
       if (!el) return;
       var lockType = el.getAttribute('data-lock');
       if (lockType) el.readOnly = true;
+      // Preview on blur for admin panel inputs
+      if (el.classList.contains('tag-admin-name') || el.classList.contains('tag-admin-sub') ||
+          el.classList.contains('tag-admin-icon') || el.classList.contains('tag-admin-color')) {
+        _adminPreview();
+      }
     }, true);
     tagPage.addEventListener('dblclick', function(e) {
       var el = e.target.closest('[data-action]');
