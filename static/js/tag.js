@@ -961,11 +961,18 @@ async function _tagRetagOnDrop(line, targetL1) {
   var ok = false;
   try {
     var apiConfig = tagGetApiConfig();
+    var _rt = document.getElementById('tagTemperature');
+    var _rp = document.getElementById('tagTopP');
+    var _rm = document.getElementById('tagMaxTokens');
+    var retagLLM = {};
+    if (_rt) retagLLM.temperature = parseFloat(_rt.value) || 0.1;
+    if (_rp) retagLLM.top_p = parseFloat(_rp.value) || 0.6;
+    if (_rm) retagLLM.max_tokens = parseInt(_rm.value) || 512;
     var body = Object.assign({
       items: [{ original: line.original, translation: line.translation || line.original }],
       concurrency: 1,
       system_prompt: prompt,
-    }, apiConfig);
+    }, retagLLM, apiConfig);
 
     var r = await fetch('/api/tag-batch', {
       method: 'POST',
@@ -1131,11 +1138,18 @@ async function tagStart() {
       var chunk = chunks[chunkIdx];
       logChunk(chunkIdx + 1, totalChunks, chunk.length, total, 'tag');
 
+      var tagLLM = {};
+      var _tEl = document.getElementById('tagTemperature');
+      var _pEl = document.getElementById('tagTopP');
+      var _mEl = document.getElementById('tagMaxTokens');
+      if (_tEl) tagLLM.temperature = parseFloat(_tEl.value) || 0.1;
+      if (_pEl) tagLLM.top_p = parseFloat(_pEl.value) || 0.6;
+      if (_mEl) tagLLM.max_tokens = parseInt(_mEl.value) || 512;
       var batchBody = Object.assign({
         items: chunk.map(function(l) { return { original: l.original }; }),
         concurrency: concurrency,
         system_prompt: fullPrompt,
-      }, apiConfig);
+      }, tagLLM, apiConfig);
       var r = await fetch('/api/tag-batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2308,7 +2322,7 @@ function tagInit() {
   // 初始化分类策略
   _initTagStrategy();
 
-  // 加载分词页并发数持久化
+  // 加载分词页参数持久化（并发数 + LLM 参数）
   var savedConcurrency = dbGet('tllmh_tag_concurrency');
   if (savedConcurrency != null) {
     var concEl = document.getElementById('tagConcurrency');
@@ -2316,6 +2330,29 @@ function tagInit() {
   }
   var concInput = document.getElementById('tagConcurrency');
   if (concInput) concInput.addEventListener('change', function() { dbSet('tllmh_tag_concurrency', parseInt(concInput.value) || 5); });
+
+  // LLM 参数持久化
+  var tagLLMParams = dbGet('tllmh_tag_params', {});
+  ['tagTemperature', 'tagTopP', 'tagMaxTokens'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var key = id.replace('tag', '').toLowerCase();
+    if (tagLLMParams[key] != null) el.value = tagLLMParams[key];
+    el.addEventListener('change', function() {
+      var p = dbGet('tllmh_tag_params', {});
+      p[key] = el.value;
+      dbSet('tllmh_tag_params', p);
+    });
+    el.addEventListener('dblclick', function() {
+      var defaults = { temperature: '0.1', topp: '0.6', maxtokens: '512' };
+      if (defaults[key]) el.value = defaults[key];
+      if (window.getSelection) window.getSelection().removeAllRanges();
+      el.blur();
+      var p = dbGet('tllmh_tag_params', {});
+      p[key] = el.value;
+      dbSet('tllmh_tag_params', p);
+    });
+  });
 
   // ── 静态按钮绑定 ──
   var _b = function(id, fn) { var el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
