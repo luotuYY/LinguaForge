@@ -1597,7 +1597,7 @@ function tagOpenAdmin() {
         '<div class="tag-admin-subs">';
     (cat.subs || []).forEach(function(sub) {
       leftHtml += '<span class="tag-admin-sub-wrap" draggable="true"' +
-        ' data-action="tag-admin-sub"' +
+        ' data-action="tag-admin-sub">' +
         '<input class="tag-admin-sub" value="' + escHtml(sub) + '"' +
           ' data-action="make-editable" data-lock="save"' +
           ' readonly">' +
@@ -1669,7 +1669,7 @@ function tagAdminAddGroup() {
   '<div class="tag-admin-subs"></div>';
   list.appendChild(newGroup);
   newGroup.querySelector('.tag-admin-name').focus();
-  _autoSave();
+  
 }
 
 function tagAdminRemoveGroup(btn) {
@@ -1687,7 +1687,7 @@ function tagAdminRemoveGroup(btn) {
   saveSubPool(pool);
   group.remove();
   _refreshPool();
-  _autoSave();
+  
 }
 
 
@@ -1696,7 +1696,7 @@ function tagAdminRemoveSub(el) {
   var input = el.parentElement.querySelector('.tag-admin-sub');
   var name = (input.value || input.defaultValue || '').trim();
   el.parentElement.remove();
-  if (name) { var pool = getSubPool(); if (pool.indexOf(name) === -1) { pool.push(name); saveSubPool(pool); } _refreshPool(); _autoSave(); }
+  if (name) { var pool = getSubPool(); if (pool.indexOf(name) === -1) { pool.push(name); saveSubPool(pool); } _refreshPool(); }
 }
 
 // ── 池子拖拽事件 ──
@@ -1742,14 +1742,14 @@ function tagAdminDrop(e, group) {
   
   // 添加到目标类目
   var subHtml = '<span class="tag-admin-sub-wrap" draggable="true"' +
-    ' data-action="tag-admin-sub"' +
+    ' data-action="tag-admin-sub">' +
     '<input class="tag-admin-sub" value="' + escHtml(name) + '" data-action="make-editable" data-lock="save" readonly>' +
     '<span class="tag-admin-sub-del" data-action="tag-admin-remove-sub" title="移回二级池">&times;</span>' +
   '</span>';
   var subsDiv = group.querySelector('.tag-admin-subs');
   var temp = document.createElement('div'); temp.innerHTML = subHtml; subsDiv.appendChild(temp.firstElementChild);
   _refreshPool();
-  _autoSave();
+  
 }
 
 // ── 池子双击编辑 ──
@@ -1768,7 +1768,7 @@ function tagAdminPoolEdit(e, el) {
       if (idx !== -1) { pool[idx] = newName; saveSubPool(pool); }
     }
     var span = document.createElement('span'); span.className = 'tag-admin-pool-text'; span.textContent = newName || oldName; input.replaceWith(span);
-    _autoSave();
+    
   }
   input.addEventListener('blur', commit);
   input.addEventListener('keydown', function(ev) {
@@ -1785,7 +1785,7 @@ function tagAdminDeletePoolItem(e, el) {
   var pool = getSubPool(); var idx = pool.indexOf(name); if (idx !== -1) { pool.splice(idx, 1); saveSubPool(pool); }
   chip.remove();
   if (document.querySelectorAll('.tag-admin-pool-chip').length === 0) _refreshPool();
-  _autoSave();
+  
 }
 
 // ── 添加新条目到池子 ──
@@ -1800,7 +1800,7 @@ function tagAdminAddToPool() {
   if (assigned) { showToast('该名称已在分类中使用'); return; }
   pool.push(name); saveSubPool(pool);
   input.value = '';
-  _refreshPool(); _autoSave();
+  _refreshPool();
   input.focus();
 }
 
@@ -1832,7 +1832,7 @@ function tagAdminPoolDrop(e) {
   var pool = getSubPool();
   if (pool.indexOf(name) === -1) { pool.push(name); saveSubPool(pool); }
   _refreshPool();
-  _autoSave();
+  
 }
 
 // ── 刷新右侧池子 DOM ──
@@ -2068,19 +2068,16 @@ function tagInit() {
       if (!el) return;
       var action = el.dataset.action;
       if (action === 'tag-edit-select-change') tagEditSelectChange();
-      else if (action === 'auto-save') _autoSave();
       else if (action === 'admin-toggle-group') {
         var group = el.closest('.tag-admin-group');
         if (group) group.classList.toggle('tag-admin-disabled', !el.checked);
-        _autoSave();
       }
     });
     tagPage.addEventListener('blur', function(e) {
       var el = e.target.closest('[data-action]');
       if (!el) return;
       var lockType = el.getAttribute('data-lock');
-      if (lockType === 'save') { el.readOnly = true; _autoSave(); }
-      else if (lockType) el.readOnly = true;
+      if (lockType) el.readOnly = true;
     }, true);
     tagPage.addEventListener('dblclick', function(e) {
       var el = e.target.closest('[data-action]');
