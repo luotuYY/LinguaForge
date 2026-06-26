@@ -76,6 +76,7 @@ localStorage key 以 `tllmh_` 前缀命名，保持向后兼容。
 ## Git 工作流
 
 远程仓库：`https://github.com/luotuYY/LinguaForge`
+推送地址（含 Token）：`https://ghp_o9…LeQz@github.com/luotuYY/LinguaForge.git`
 
 ```bash
 # 开发完成后提交推送
