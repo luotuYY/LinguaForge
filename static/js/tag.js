@@ -354,6 +354,26 @@ function tagRenderColumns() {
 
 // ── 增量更新单张卡片(分词进行时不重建整个列) ──
 function tagUpdateOneCard(line) {
+  // Schema 校验：防止无效的 tag_l1（如 LLM 错把二级类目当一级）流入渲染
+  if (line.tag_l1) {
+    var _schema = getEnabledSchema();
+    if (!_schema[line.tag_l1]) {
+      // l1 不在 schema 中，尝试从子类反查
+      var _found = null;
+      Object.keys(_schema).forEach(function(k) {
+        if (_schema[k].subs.indexOf(line.tag_l1) >= 0) _found = k;
+      });
+      if (_found) {
+        if (!line.tag_l2) line.tag_l2 = line.tag_l1;
+        line.tag_l1 = _found;
+      } else {
+        line.tag_l1 = '';
+        line.tag_l2 = '';
+        line.confidence = 0;
+      }
+      _tagBumpCount(line.tag_l1 || '', line.tag_l1);
+    }
+  }
   var oldCard = document.querySelector('.tag-card[data-index="' + line.index + '"]');
   var cat = line.tag_l1 ? getEnabledSchema()[line.tag_l1] : null;
   var bc = cat ? cat.color : '#555';
@@ -1059,11 +1079,23 @@ async function tagStart() {
                   if (l1) {
                     var schemaKeys = Object.keys(getEnabledSchema());
                     var matchL1 = schemaKeys.find(function(k) { return k.toLowerCase() === l1.toLowerCase(); });
-                    if (matchL1) l1 = matchL1;
-                    else {
-                      // Fuzzy: check if l1 contains or is contained by a schema key
-                      var fuzzy = schemaKeys.find(function(k) { return k.toLowerCase().indexOf(l1.toLowerCase()) >= 0 || l1.toLowerCase().indexOf(k.toLowerCase()) >= 0; });
-                      if (fuzzy) l1 = fuzzy;
+                    if (matchL1) {
+                      l1 = matchL1;
+                    } else {
+                      // 回退：LLM 可能把二级类目名错放在 l1，尝试从 schema 子类反查一级
+                      var foundParent = null;
+                      schemaKeys.forEach(function(k) {
+                        if (getEnabledSchema()[k].subs.indexOf(l1) >= 0) foundParent = k;
+                      });
+                      if (foundParent) {
+                        // l1 实际是二级类目名，纠正：移为 l2，补上正确的一级
+                        if (!l2) l2 = l1;
+                        l1 = foundParent;
+                      } else {
+                        // Fuzzy: check if l1 contains or is contained by a schema key
+                        var fuzzy = schemaKeys.find(function(k) { return k.toLowerCase().indexOf(l1.toLowerCase()) >= 0 || l1.toLowerCase().indexOf(k.toLowerCase()) >= 0; });
+                        l1 = fuzzy || '';
+                      }
                     }
                   }
                   item.tag_l1 = l1;
