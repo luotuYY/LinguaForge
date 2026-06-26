@@ -768,14 +768,15 @@ function triggerDownload(filename, fcontent) {
 
   // ── 翻译页：提示词管理 ──
   _bind('promptTitle', 'focus', onTitleFocus);
-  var sp = $('savedPrompts');
-  if (sp) {
-    sp.addEventListener('click', function(e) {
-      var chip = e.target.closest('.prompt-chip');
-      if (!chip) return;
-      var del = e.target.closest('.chip-del');
-      if (del) { deletePrompt(parseInt(chip.dataset.id)); return; }
-      if (chip.dataset.id) loadSavedPrompt(chip.dataset.id);
+  // ── 翻译页：提示词芯片事件委托 ──
+  var savedPrompts = $('savedPrompts');
+  if (savedPrompts) {
+    savedPrompts.addEventListener('click', function(e) {
+      var el = e.target.closest('[data-action]');
+      if (!el) return;
+      var action = el.dataset.action;
+      if (action === 'load-saved-prompt') loadSavedPrompt(el.dataset.id);
+      else if (action === 'delete-prompt') { deletePrompt(parseInt(el.dataset.id)); e.stopPropagation(); }
     });
   }
   var promptBtns = document.querySelectorAll('#promptSaveBar .btn-sm');
@@ -896,18 +897,6 @@ function triggerDownload(filename, fcontent) {
     fileInfo.addEventListener('dragend', function(e) {
       var el = e.target.closest('[data-action="file-drag-end"]');
       if (el) onFileDragEnd(e);
-    });
-  }
-
-  // ── 翻译页：提示词事件委托 ──
-  var savedPrompts = $('savedPrompts');
-  if (savedPrompts) {
-    savedPrompts.addEventListener('click', function(e) {
-      var el = e.target.closest('[data-action]');
-      if (!el) return;
-      var action = el.dataset.action;
-      if (action === 'load-saved-prompt') loadSavedPrompt(el.dataset.id);
-      else if (action === 'delete-prompt') { deletePrompt(parseInt(el.dataset.id)); e.stopPropagation(); }
     });
   }
 

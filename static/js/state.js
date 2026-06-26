@@ -438,7 +438,7 @@ function savePrompt() {
 }
 
 function loadSavedPrompt(id) {
-  // 优先匹配内置预设
+  // 优先匹配内置预设（id 为字符串）
   var presets = PRESET_PROMPTS[state.translateMode] || [];
   var preset = presets.find(function (x) { return x.id === id; });
   if (preset) {
@@ -451,9 +451,10 @@ function loadSavedPrompt(id) {
     showToast('已加载: ' + preset.name);
     return;
   }
-  // 匹配用户自定义提示词
+  // 匹配用户自定义提示词（dataset.id 返回字符串，存储的 id 为数字）
   var prompts = dbGet(promptKey(), []);
-  var p = prompts.find(function (x) { return x.id === id; });
+  var numId = Number(id);
+  var p = prompts.find(function (x) { return x.id === numId; });
   if (p) {
     $('system_prompt').value = p.text;
     // 润色模式同时恢复配对的 Step2
@@ -573,7 +574,7 @@ function exportPrompts() {
   a.href = url;
   a.download = 'LinguaForge_prompts_' + new Date().toISOString().slice(0, 10) + '.json';
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
   showToast('已导出 ' + total + ' 条提示词（直译' + directPrompts.length + ' / 润色' + polishPrompts.length + '）');
 }
 
