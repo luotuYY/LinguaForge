@@ -1,9 +1,5 @@
 # AGENTS.md
 
-<INSTRUCTIONS>
-用中文输出思考过程；
-</INSTRUCTIONS>
-
 ## 项目概览
 
 LinguaForge 是游戏本地化翻译工具，支持翻译/润色 + 分词/标签分类 + 去重。
@@ -29,7 +25,6 @@ LinguaForge 前端采用纯 ES 模块架构：
       ↑
      app  →  main.js
   ```
-- HTML `onclick` 属性通过各模块底部的 `window.xxx = xxx` 绑定保持向后兼容。
 
 ### 模块职责
 
