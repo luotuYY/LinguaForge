@@ -5,7 +5,7 @@
  */
 
 import { $, escHtml, showToast, log, logChunk, setHighlight, hl, matches } from './utils.js';
-import { dbGet, dbSet, dbHas } from './db.js';
+import { dbGet, dbSet, dbSetCache, dbHas } from './db.js';
 import { state, rebuildIndicesAndCheckboxes, updateTranslateAllButton } from './state.js';
 import { renderFileList } from './api.js';
 import { renderPreview, renderCompare, _renderPagination, _bindPagination } from './render.js';
@@ -1628,7 +1628,8 @@ function _readAdminPool() {
 // ── 实时预览（不写 DB） ──
 function _adminPreview() {
   var schema = _readAdminSchema();
-  if (Object.keys(schema).length > 0) dbSet('tllmh_tag_schema', schema);
+  // 只写缓存用于渲染，不持久化到 IndexedDB（等"保存并关闭"才持久化）
+  if (Object.keys(schema).length > 0) dbSetCache('tllmh_tag_schema', schema);
   saveSubPool(_readAdminPool());
   tagRenderColumns(); tagRenderPreview(); tagRenderCatPanel(); tagBtnState();
 }

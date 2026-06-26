@@ -141,6 +141,11 @@ function dbSet(key, value) {
   }
 }
 
+// ── 仅写入内存缓存（不持久化，用于预览等临时场景） ──
+function dbSetCache(key, value) {
+  _cache[key] = value;
+}
+
 // ── 删除 ──
 function dbDel(key) {
   delete _cache[key];
@@ -159,6 +164,6 @@ function dbHas(key) {
 }
 
 // ── Module exports ──
-export { dbReady, dbGet, dbSet, dbDel, dbHas };
+export { dbReady, dbGet, dbSet, dbSetCache, dbDel, dbHas };
 
 // ── Window bindings ──
