@@ -2308,6 +2308,15 @@ function tagInit() {
   // 初始化分类策略
   _initTagStrategy();
 
+  // 加载分词页并发数持久化
+  var savedConcurrency = dbGet('tllmh_tag_concurrency');
+  if (savedConcurrency != null) {
+    var concEl = document.getElementById('tagConcurrency');
+    if (concEl) concEl.value = savedConcurrency;
+  }
+  var concInput = document.getElementById('tagConcurrency');
+  if (concInput) concInput.addEventListener('change', function() { dbSet('tllmh_tag_concurrency', parseInt(concInput.value) || 5); });
+
   // ── 静态按钮绑定 ──
   var _b = function(id, fn) { var el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
   _b('tagBtnStart', tagStart);
