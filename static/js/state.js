@@ -755,11 +755,6 @@ document.addEventListener('visibilitychange', function () {
     if (!_llmPollTimer) { checkLLM(); _llmPollTimer = setInterval(checkLLM, 15000); }
   }
 });
-// 页面卸载时清理定时器，避免控制台错误
-  if (_llmPollTimer) { clearInterval(_llmPollTimer); _llmPollTimer = 0; }
-});
 
 // ── Module exports ──
 export { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, DIRECT_DEFAULT, POLISH_DIRECT_DEFAULT, POLISH_STEP2_DEFAULT, getPolishStep2Prompt, setPolishStep2Prompt, resetParamDefault, saveModeParams, loadModeParams, getLLMParams, setMode, updateTranslateAllButton, getApiConfig, loadApiConfig, saveApiConfig, testApiConnection, setProvider, onThinkingChange, checkLLM, loadDefaults, togglePolishStrategy, savePolishStrategy, resetPolishStrategy, showPromptBar, onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt, renderSavedPrompts, togglePrompt, resetSystemPrompt, exportPrompts, importPrompts, updateManualBtn, updateRetryButton, updateExportCheckedButton, promptKey };
-
-// ── Window bindings (HTML onclick compat) ──

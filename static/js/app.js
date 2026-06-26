@@ -9,14 +9,15 @@ import { $, escHtml, showToast, log, naturalCompare, fallbackCopy } from './util
 import { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, 
           updateTranslateAllButton, updateRetryButton, updateExportCheckedButton,
           getLLMParams, getApiConfig, checkLLM } from './state.js';
-import { processFiles, deleteFile, toggleFile, deletePreviewLine, onFileDragStart, onFileDragOver, onFileDrop, onFileDragEnd } from './api.js';
+import { processFiles, deleteFile, toggleFile, deletePreviewLine,
+          onFileDragStart, onFileDragOver, onFileDrop, onFileDragEnd,
+          translateOneCore, translateBatchItems,
+          enterTranslatingState, exitTranslatingState,
+          renderFileList, loadManualInput, resetSourceInput, deleteCheckedPreview } from './api.js';
 import { renderInternal, getCheckedFileNames, renderPreview, renderCompare, updateSearchUI,
           updateCompareRow, updatePreviewLine, updatePreviewSelectAllVisibility,
           getCheckedPreviewIndices, getCheckedRows, onPreviewCheck, onCompareCheck,
           updateSelectAllPreview, updateSelectAllCompare, toggleSelectAllCompare } from './render.js';
-import { translateOneCore, translateBatchItems,
-          enterTranslatingState, exitTranslatingState,
-          renderFileList, loadManualInput, resetSourceInput, deleteCheckedPreview, deletePreviewLine } from './api.js';
 import { setProvider, setMode, saveModeParams, saveApiConfig, testApiConnection,
           onThinkingChange, togglePrompt, resetSystemPrompt,
           togglePolishStrategy, savePolishStrategy, resetPolishStrategy,
