@@ -311,7 +311,7 @@ function tagRenderColumns() {
       '<span class="tag-col-title">' + escHtml(l1) + '</span>' +
       '<span class="tag-col-count" id="cnt-' + l1 + '">' + items.length + '</span></div>' +
       '<div class="tag-column-body" data-l1="' + l1 + '" ' +
-      'data-action="tag-drag-over" data-action="tag-drop" data-action="tag-drag-leave">';
+      'data-action="tag-column-body">';
     shown.forEach(function(l) { html += tagRenderCard(l); });
     if (displayLimit > 0 && items.length > displayLimit) html += '<div class="tag-column-empty">…还有 ' + (items.length - displayLimit) + ' 条</div>';
     if (items.length === 0) html += '<div class="tag-column-empty">拖入词条或运行分词</div>';
@@ -325,7 +325,7 @@ function tagRenderColumns() {
     '<span class="tag-col-icon">📋</span><span class="tag-col-title">未分类</span>' +
     '<span class="tag-col-count" id="cnt-untagged">' + untagged.length + '</span></div>' +
     '<div class="tag-column-body" data-l1="" ' +
-    'data-action="tag-drag-over" data-action="tag-drop" data-action="tag-drag-leave">';
+    'data-action="tag-column-body">';
   unShown.forEach(function(l) { html += tagRenderCard(l); });
   if (untaggedLimit > 0 && untagged.length > untaggedLimit) html += '<div class="tag-column-empty">…还有 ' + (untagged.length - untaggedLimit) + ' 条</div>';
   if (untagged.length === 0 && tagState.lines.length > 0) html += '<div class="tag-column-empty">所有词条已分类 ✓</div>';
@@ -437,7 +437,7 @@ function tagRenderCard(l) {
   var cat = l.tag_l1 ? getEnabledSchema()[l.tag_l1] : null;
   var bc = cat ? cat.color : '#555';
   return '<div class="tag-card" draggable="true" data-index="' + l.index + '" data-l1="' + escHtml(l.tag_l1 || '') + '" ' +
-    'data-action="tag-card-drag-start" data-action="tag-card-drag-end" ' +
+    'data-action="tag-card" ' +
     'style="border-left:3px solid ' + bc + '">' +
     '<div class="tag-card-row1">' +
       '<span class="tag-card-num">#' + (l.index+1) + '</span>' +
@@ -729,10 +729,9 @@ function _tagApplyDragOver() {
   // This is set by tagDragOver/tagDragLeave before the RAF
 }
 
-function tagDragOver(e) {
+function tagDragOver(e, t) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  var t = e.currentTarget;
   if (_dragOverTarget === t) return; // same target, skip
   // Clear old target immediately
   if (_dragOverTarget) _dragOverTarget.classList.remove('drag-over-col');
@@ -744,17 +743,16 @@ function tagDragOver(e) {
   });
 }
 
-function tagDragLeave(e) {
-  var t = e.currentTarget;
+function tagDragLeave(e, t) {
   // Only clear if leaving the current highlighted target
   if (_dragOverTarget === t) {
     t.classList.remove('drag-over-col');
     _dragOverTarget = null;
   }
 }
-function tagDrop(e) {
-  e.preventDefault(); e.currentTarget.classList.remove('drag-over-col');
-  var targetL1 = e.currentTarget.dataset.l1;
+function tagDrop(e, t) {
+  e.preventDefault(); t.classList.remove('drag-over-col');
+  var targetL1 = t.dataset.l1;
   if (_tagDragIdx < 0) return;
   var line = tagState.lines[_tagDragIdx]; if (!line) return;
   var targetCard = e.target.closest('.tag-card');
@@ -1582,9 +1580,7 @@ function tagOpenAdmin() {
     var disabledCls = cat.enabled === false ? ' tag-admin-disabled' : '';
     leftHtml +=
       '<div class="tag-admin-group"' + disabledCls + '" data-l1="' + escHtml(l1) + '"' +
-        ' data-action="tag-admin-drag-over"' +
-        ' data-action="tag-admin-drag-leave"' +
-        ' data-action="tag-admin-drop">' +
+        ' data-action="tag-admin-group">' +
         '<div class="tag-admin-group-header">' +
           '<label class="tag-admin-enabled-wrap" title="启用/禁用">' +
             '<input type="checkbox" class="tag-admin-enabled"' + (cat.enabled !== false ? ' checked' : '') +
@@ -1592,8 +1588,7 @@ function tagOpenAdmin() {
           '</label>' +
           '<input class="tag-admin-icon" value="' + escHtml(cat.icon || '📌') + '" data-action="auto-save" style="width:30px;text-align:center">' +
           '<input class="tag-admin-name" value="' + escHtml(l1) + '" style="flex:1"' +
-            ' data-action="make-editable"' +
-            ' data-action="lock"' +
+            ' data-action="make-editable" data-lock="save"' +
             ' readonly">' +
           '<input class="tag-admin-color" type="color" value="' + (cat.color || '#888') + '" data-action="auto-save" title="颜色">' +
           '<button class="btn btn-sm" data-action="tag-admin-add-sub">+子项</button>' +
@@ -1602,11 +1597,9 @@ function tagOpenAdmin() {
         '<div class="tag-admin-subs">';
     (cat.subs || []).forEach(function(sub) {
       leftHtml += '<span class="tag-admin-sub-wrap" draggable="true"' +
-        ' data-action="tag-admin-sub-drag-start"' +
-        ' data-action="tag-admin-sub-drag-end">' +
+        ' data-action="tag-admin-sub"' +
         '<input class="tag-admin-sub" value="' + escHtml(sub) + '"' +
-          ' data-action="make-editable"' +
-          ' data-action="lock-save"' +
+          ' data-action="make-editable" data-lock="save"' +
           ' readonly">' +
         '<span class="tag-admin-sub-del" data-action="tag-admin-remove-sub" title="移回二级池">&times;</span>' +
       '</span>';
@@ -1621,9 +1614,7 @@ function tagOpenAdmin() {
   availablePool.forEach(function(name) {
     poolHtml +=
       '<div class="tag-admin-pool-chip" draggable="true"' +
-        ' data-action="tag-admin-pool-drag-start"' +
-        ' data-action="tag-admin-pool-drag-end"' +
-        ' data-action="tag-admin-pool-edit">' +
+        ' data-action="tag-admin-pool-chip"' +
         '<span class="tag-admin-pool-text">' + escHtml(name) + '</span>' +
         '<span class="tag-admin-pool-del" data-action="tag-admin-del-pool-item" title="永久删除">&times;</span>' +
       '</div>';
@@ -1642,8 +1633,7 @@ function tagAdminAddSub(btn) {
   var span = document.createElement('span');
   span.className = 'tag-admin-sub-wrap';
   span.draggable = true;
-  span.setAttribute('data-action', 'tag-admin-sub-drag-start');
-  span.setAttribute('data-action', 'tag-admin-sub-drag-end');
+  span.setAttribute('data-action', 'tag-admin-sub');
   span.innerHTML = '<input class="tag-admin-sub" placeholder="新子项" value="">' +
     '<span class="tag-admin-sub-del" data-action="tag-admin-remove-sub" title="移回二级池">&times;</span>';
   wrapper.appendChild(span);
@@ -1664,16 +1654,14 @@ function tagAdminAddGroup() {
   var list = document.getElementById('tagAdminList');
   var newGroup = document.createElement('div');
   newGroup.className = 'tag-admin-group';
-  newGroup.setAttribute('data-action', 'tag-admin-drag-over');
-  newGroup.setAttribute('data-action', 'tag-admin-drag-leave');
-  newGroup.setAttribute('data-action', 'tag-admin-drop');
+  newGroup.setAttribute('data-action', 'tag-admin-group');
   newGroup.dataset.l1 = '新类目';
   newGroup.innerHTML = '<div class="tag-admin-group-header">' +
     '<label class="tag-admin-enabled-wrap" title="启用/禁用">' +
       '<input type="checkbox" class="tag-admin-enabled" checked data-action="admin-toggle-group">' +
     '</label>' +
     '<input class="tag-admin-icon" value="📌" data-action="auto-save" style="width:30px;text-align:center">' +
-    '<input class="tag-admin-name" value="新类目" data-action="make-editable" data-action="lock-save" readonly style="flex:1">' +
+    '<input class="tag-admin-name" value="新类目" data-action="make-editable" data-lock="save" readonly style="flex:1">' +
     '<input class="tag-admin-color" type="color" value=' + _randomAdminColor() + ' data-action="auto-save">' +
     '<button class="btn btn-sm" data-action="tag-admin-add-sub">+子项</button>' +
     '<button class="btn btn-sm tag-admin-del-btn" data-action="tag-admin-remove-group">🗑</button>' +
@@ -1754,9 +1742,8 @@ function tagAdminDrop(e, group) {
   
   // 添加到目标类目
   var subHtml = '<span class="tag-admin-sub-wrap" draggable="true"' +
-    ' data-action="tag-admin-sub-drag-start"' +
-    ' data-action="tag-admin-sub-drag-end">' +
-    '<input class="tag-admin-sub" value="' + escHtml(name) + '" data-action="make-editable" data-action="lock" readonly>' +
+    ' data-action="tag-admin-sub"' +
+    '<input class="tag-admin-sub" value="' + escHtml(name) + '" data-action="make-editable" data-lock="save" readonly>' +
     '<span class="tag-admin-sub-del" data-action="tag-admin-remove-sub" title="移回二级池">&times;</span>' +
   '</span>';
   var subsDiv = group.querySelector('.tag-admin-subs');
@@ -1862,7 +1849,7 @@ function _refreshPool() {
   if (available.length === 0) { container.innerHTML = '<div style="font-size:0.68rem;color:var(--text-muted);text-align:center;padding:12px 0">池中暂无二级类目<br>点击下方按钮添加</div>'; return; }
   var html = '';
   available.forEach(function(name) {
-    html += '<div class="tag-admin-pool-chip" draggable="true" data-action="tag-admin-pool-drag-start" data-action="tag-admin-pool-drag-end" data-action="tag-admin-pool-edit">' +
+    html += '<div class="tag-admin-pool-chip" draggable="true" data-action="tag-admin-pool-chip">' +
       '<span class="tag-admin-pool-text">' + escHtml(name) + '</span>' +
       '<span class="tag-admin-pool-del" data-action="tag-admin-del-pool-item" title="永久删除">&times;</span>' +
     '</div>';
@@ -2065,7 +2052,7 @@ function tagInit() {
     else if (action === 'tag-admin-del-pool-item') tagAdminDeletePoolItem(e, btn);
     else if (action === 'tag-edit-pick') tagEditPick(btn.dataset.l1, btn.dataset.l2);
     else if (action === 'make-editable') { btn.readOnly = false; btn.focus(); btn.select(); }
-    else if (action === 'tag-admin-pool-edit') tagAdminPoolEdit(e, btn);
+    else if (action === 'tag-admin-pool-chip') tagAdminPoolEdit(e, btn);
   });
 
   // ── 标签页：input/change/blur 委托 ──
@@ -2091,9 +2078,9 @@ function tagInit() {
     tagPage.addEventListener('blur', function(e) {
       var el = e.target.closest('[data-action]');
       if (!el) return;
-      var action = el.dataset.action;
-      if (action === 'lock-save') { el.readOnly = true; _autoSave(); }
-      else if (action === 'lock') el.readOnly = true;
+      var lockType = el.getAttribute('data-lock');
+      if (lockType === 'save') { el.readOnly = true; _autoSave(); }
+      else if (lockType) el.readOnly = true;
     }, true);
     tagPage.addEventListener('dblclick', function(e) {
       var el = e.target.closest('[data-action]');
@@ -2105,40 +2092,40 @@ function tagInit() {
       var el = e.target.closest('[data-action]');
       if (!el) return;
       var action = el.dataset.action;
-      if (action === 'tag-card-drag-start') tagCardDragStart(e);
-      else if (action === 'tag-admin-sub-drag-start') tagAdminSubDragStart(e, el);
-      else if (action === 'tag-admin-pool-drag-start') tagAdminPoolDragStart(e, el);
+      if (action === 'tag-card') tagCardDragStart(e);
+      else if (action === 'tag-admin-sub') tagAdminSubDragStart(e, el);
+      else if (action === 'tag-admin-pool-chip') tagAdminPoolDragStart(e, el);
     });
     tagPage.addEventListener('dragend', function(e) {
       var el = e.target.closest('[data-action]');
       if (!el) return;
       var action = el.dataset.action;
-      if (action === 'tag-card-drag-end') tagCardDragEnd(e);
-      else if (action === 'tag-admin-sub-drag-end') tagAdminSubDragEnd(e, el);
-      else if (action === 'tag-admin-pool-drag-end') tagAdminPoolDragEnd(e, el);
+      if (action === 'tag-card') tagCardDragEnd(e);
+      else if (action === 'tag-admin-sub') tagAdminSubDragEnd(e, el);
+      else if (action === 'tag-admin-pool-chip') tagAdminPoolDragEnd(e, el);
     });
     tagPage.addEventListener('dragover', function(e) {
       var el = e.target.closest('[data-action]');
       if (!el) return;
       var action = el.dataset.action;
-      if (action === 'tag-drag-over') { e.preventDefault(); tagDragOver(e); }
-      else if (action === 'tag-admin-drag-over') { e.preventDefault(); tagAdminDragOver(e, el); }
+      if (action === 'tag-column-body') { e.preventDefault(); tagDragOver(e, el); }
+      else if (action === 'tag-admin-group') { e.preventDefault(); tagAdminDragOver(e, el); }
     });
     tagPage.addEventListener('dragleave', function(e) {
       var el = e.target.closest('[data-action]');
       if (!el) return;
       var action = el.dataset.action;
-      if (action === 'tag-drag-leave') tagDragLeave(e);
-      else if (action === 'tag-admin-drag-leave') tagAdminDragLeave(e, el);
+      if (action === 'tag-column-body') tagDragLeave(e, el);
+      else if (action === 'tag-admin-group') tagAdminDragLeave(e, el);
     });
     tagPage.addEventListener('drop', function(e) {
       e.preventDefault();
       var el = e.target.closest('[data-action]');
       if (!el) return;
       var action = el.dataset.action;
-      if (action === 'tag-drop') tagDrop(e);
+      if (action === 'tag-column-body') tagDrop(e, el);
       else if (action === 'tag-admin-pool-drop') tagAdminPoolDrop(e);
-      else if (action === 'tag-admin-drop') tagAdminDrop(e, el);
+      else if (action === 'tag-admin-group') tagAdminDrop(e, el);
     });
   }
 
