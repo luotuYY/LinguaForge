@@ -2332,9 +2332,13 @@ async function tagInit() {
   var concInput = document.getElementById('tagConcurrency');
   if (concInput) {
     concInput.addEventListener('blur', function() { dbSet('tllmh_tag_concurrency', parseInt(concInput.value) || 5); });
-    concInput.addEventListener('dblclick', function() {
-      resetInputDefault(concInput, function() { dbSet('tllmh_tag_concurrency', parseInt(concInput.value) || 5); });
-    });
+    // 双击 span label 恢复默认
+    var concLabel = concInput.previousElementSibling;
+    if (concLabel && concLabel.tagName === 'SPAN') {
+      concLabel.addEventListener('dblclick', function() {
+        resetInputDefault(concInput, function() { dbSet('tllmh_tag_concurrency', parseInt(concInput.value) || 5); });
+      });
+    }
   }
 
   // LLM 参数持久化
@@ -2353,13 +2357,17 @@ async function tagInit() {
       p[cfg.key] = el.value;
       dbSet('tllmh_tag_params', p);
     });
-    el.addEventListener('dblclick', function() {
-      resetInputDefault(el, function() {
-        var p = dbGet('tllmh_tag_params', {});
-        p[cfg.key] = el.value;
-        dbSet('tllmh_tag_params', p);
+    // 双击 label span 恢复默认
+    var label = el.previousElementSibling;
+    if (label && label.tagName === 'SPAN') {
+      label.addEventListener('dblclick', function() {
+        resetInputDefault(el, function() {
+          var p = dbGet('tllmh_tag_params', {});
+          p[cfg.key] = el.value;
+          dbSet('tllmh_tag_params', p);
+        });
       });
-    });
+    }
   });
 
   // ── 静态按钮绑定 ──
