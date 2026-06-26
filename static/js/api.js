@@ -381,7 +381,7 @@ function renderFileList() {
   for (var i = 0; i < state.files.length; i++) {
     var f = state.files[i];
     var lineCount = state.lines.filter(function (l) { return l.file === f.name; }).length;
-    html += '<div class="file-entry" draggable="true" data-file-index="' + i + '" data-action="file-drag-start" data-action="file-drag-over" data-action="file-drop" data-action="file-drag-end">' +
+    html += '<div class="file-entry" draggable="true" data-file-index="' + i + '" data-action="file-entry">' +
       '<input type="checkbox" class="file-check" ' + (f.checked ? 'checked' : '') + ' data-action="toggle-file" data-index="' + i + '" title="勾选后该文件内容会出现在预览和翻译中">' +
       '<span class="file-name">' + escHtml(f.name) + '</span>' +
       '<span class="file-count">' + lineCount + ' 行</span>' +

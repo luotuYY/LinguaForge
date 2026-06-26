@@ -334,6 +334,9 @@ function tagRenderColumns() {
   if (untagged.length === 0 && tagState.lines.length > 0) html += '<div class="tag-column-empty">所有词条已分类 ✓</div>';
   html += '</div></div>';
   container.innerHTML = html;
+  // Remove old pagination bar
+  var oldPg = container.parentElement.querySelector('.pagination-bar');
+  if (oldPg) oldPg.remove();
   // 分页控件
   var totalItems = tagState.lines.length;
   if (totalItems > perPage) {

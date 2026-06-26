@@ -267,7 +267,9 @@ function renderGroups() {
     });
 
     container.innerHTML = paginatedHtml;
-    // Add pagination bar
+    // Remove old pagination bar and add new one
+    var oldPg = container.parentElement.querySelector('.pagination-bar');
+    if (oldPg) oldPg.remove();
     if (total > perPage) {
       var pgHtml = _renderPagination(total, perPage, dedupState.currentPage, 'dedup');
       container.insertAdjacentHTML('afterend', pgHtml);

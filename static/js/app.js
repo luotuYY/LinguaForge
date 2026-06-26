@@ -882,20 +882,20 @@ function triggerDownload(filename, fcontent) {
       else if (action === 'toggle-file') toggleFile(idx);
     });
     fileInfo.addEventListener('dragstart', function(e) {
-      var el = e.target.closest('[data-action="file-drag-start"]');
+      var el = e.target.closest('[data-action="file-entry"]');
       if (el) onFileDragStart(e);
     });
     fileInfo.addEventListener('dragover', function(e) {
-      var el = e.target.closest('[data-action="file-drag-over"]');
+      var el = e.target.closest('[data-action="file-entry"]');
       if (el) { e.preventDefault(); onFileDragOver(e); }
     });
     fileInfo.addEventListener('drop', function(e) {
       e.preventDefault();
-      var el = e.target.closest('[data-action="file-drop"]');
+      var el = e.target.closest('[data-action="file-entry"]');
       if (el) onFileDrop(e);
     });
     fileInfo.addEventListener('dragend', function(e) {
-      var el = e.target.closest('[data-action="file-drag-end"]');
+      var el = e.target.closest('[data-action="file-entry"]');
       if (el) onFileDragEnd(e);
     });
   }
