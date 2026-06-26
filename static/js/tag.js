@@ -371,7 +371,19 @@ function _bindColPagination(colEl) {
       var page = parseInt(btn.dataset.page);
       if (page < 1) return;
       tagState.colPages[colId] = page;
-      tagRenderColumns();
+      // 优先轻量切换：只改可见性 + 更新分页条
+      var body = colEl.querySelector('.tag-column-body');
+      var perPage = tagState.previewRowLimit || 200;
+      var totalCards = body ? body.querySelectorAll('.tag-card').length : 0;
+      if (totalCards > perPage) {
+        _applyColPageVisibility(body, page, perPage);
+        var pgBar = colEl.querySelector('.col-pagination');
+        if (pgBar) pgBar.outerHTML = _renderColPagination(colId, totalCards, perPage);
+        _bindColPagination(colEl);
+      } else {
+        // 卡片数不超过 perPage，走全量渲染
+        tagRenderColumns();
+      }
     });
   });
 }
@@ -437,15 +449,47 @@ function tagUpdateOneCard(line) {
   tagUpdateCounts();
 }
 
-// ── 追加卡片到指定栏 ──
+// ── 追加卡片到指定栏（自动分页） ──
 function _appendCardToColumn(l1, line) {
-  var body = document.querySelector('.tag-column-body[data-l1="' + (l1 || '') + '"]');
-  if (!body) return;
-  var empty = body.querySelector('.tag-column-empty');
+  var colEl = document.querySelector('.tag-column .tag-column-body[data-l1="' + (l1 || '') + '"]');
+  if (!colEl) return;
+  var column = colEl.closest('.tag-column');
+  var empty = colEl.querySelector('.tag-column-empty');
   if (empty) empty.remove();
-  body.insertAdjacentHTML('beforeend', tagRenderCard(line));
-  var newCard = body.querySelector('.tag-card[data-index="' + line.index + '"]');
+  colEl.insertAdjacentHTML('beforeend', tagRenderCard(line));
+  var newCard = colEl.querySelector('.tag-card[data-index="' + line.index + '"]');
   if (newCard) newCard.setAttribute('data-l1', l1 || '');
+  // 检查是否需要分页
+  var perPage = tagState.previewRowLimit || 200;
+  var totalCards = colEl.querySelectorAll('.tag-card').length;
+  if (totalCards > perPage) {
+    var colId = 'tag-col-' + (l1 || '__untagged');
+    var existingPg = column.querySelector('.col-pagination');
+    if (existingPg) existingPg.remove();
+    colEl.insertAdjacentHTML('afterend', _renderColPagination(colId, totalCards, perPage));
+    _bindColPagination(column);
+    // 新增栏：跳到最后一页（新卡片在末尾）；未分类栏：保持当前页
+    var totalPages = Math.ceil(totalCards / perPage);
+    var curPage = tagState.colPages[colId] || 1;
+    if (!l1 && curPage < totalPages) {
+      // 未分类栏：保持当前页不跳（回补逻辑保证当前页有内容）
+    } else if (l1) {
+      // 分类栏：新卡片在最后一页
+      tagState.colPages[colId] = totalPages;
+      curPage = totalPages;
+    }
+    _applyColPageVisibility(colEl, curPage, perPage);
+  }
+}
+
+// ── 应用列内卡片可见性（CSS 控制分页） ──
+function _applyColPageVisibility(body, page, perPage) {
+  var cards = body.querySelectorAll('.tag-card');
+  var start = (page - 1) * perPage;
+  var end = page * perPage;
+  for (var i = 0; i < cards.length; i++) {
+    cards[i].style.display = (i >= start && i < end) ? '' : 'none';
+  }
 }
 
 // ── 未分类栏回补：从池中取下一个未显示的未分类条目补入 ──
