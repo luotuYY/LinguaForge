@@ -3,6 +3,7 @@
  */
 
 import { $, escHtml, showToast } from './utils.js';
+import { _renderPagination } from './render.js';
 import { state, getApiConfig } from './state.js';
 import { dbGet, dbSet } from './db.js';
 
@@ -18,6 +19,8 @@ var dedupState = {
     evaluating: false,
     abort: false,
     fileContents: {},
+    rowsPerPage: 200,
+    currentPage: 1,
 };
 
 // ── 默认参数 ──
@@ -216,7 +219,78 @@ function renderGroups() {
       html += "</div></div>";
     });
 
-    container.innerHTML = html;
+    // Pagination
+    var total = visibleKeys.length;
+    var perPage = dedupState.rowsPerPage || 200;
+    var totalPages = Math.max(1, Math.ceil(total / perPage));
+    if (dedupState.currentPage > totalPages) dedupState.currentPage = totalPages;
+    if (dedupState.currentPage < 1) dedupState.currentPage = 1;
+    var start = (dedupState.currentPage - 1) * perPage;
+    var pageKeys = visibleKeys.slice(start, start + perPage);
+
+    var paginatedHtml = "";
+    pageKeys.forEach(function (key, pIdx) {
+      var gIdx = visibleKeys.indexOf(key);
+      var entries = dedupState.groups[key];
+      var bestIdx = dedupState.bestIndices.get(key);
+      if (bestIdx == null) bestIdx = -1;
+
+      paginatedHtml += '<div class="dedup-group" data-group="' + gIdx + '">';
+      paginatedHtml += '<div class="dedup-group-header" data-action="toggle-group">';
+      paginatedHtml += '  <span class="dedup-group-toggle">▼</span>';
+      paginatedHtml += '  <span class="dedup-group-original">' + escHtml(key) + "</span>";
+      paginatedHtml += '  <span class="dedup-group-count">' + entries.length + " 条</span>";
+      if (bestIdx >= 0) {
+        paginatedHtml += '  <span class="dedup-group-best">最优：#' + (bestIdx + 1) + "</span>";
+      }
+      paginatedHtml += "</div>";
+      paginatedHtml += '<div class="dedup-group-body">';
+
+      entries.forEach(function (e, idx) {
+        var checked = !!dedupState.selected.get(_entryId(e));
+        var isBest = bestIdx >= 0 && idx === bestIdx;
+        var rowClass = checked ? " dedup-row-selected" : "";
+        if (isBest) rowClass += " dedup-row-best";
+
+        paginatedHtml +=
+          '<div class="dedup-row' + rowClass +
+          '" data-group="' + gIdx +
+          '" data-idx="' + idx +
+          '" data-action="select-row">';
+        paginatedHtml += '  <span class="dedup-row-original">' + escHtml(e.original) + "</span>";
+        paginatedHtml += '  <span class="dedup-row-trans">' + escHtml(e.translation) + "</span>";
+        paginatedHtml += '  <span class="dedup-row-file">' + escHtml(e.file) + "</span>";
+        paginatedHtml += "</div>";
+      });
+
+      paginatedHtml += "</div></div>";
+    });
+
+    container.innerHTML = paginatedHtml;
+    // Add pagination bar
+    if (total > perPage) {
+      var pgHtml = _renderPagination(total, perPage, dedupState.currentPage, 'dedup');
+      container.insertAdjacentHTML('afterend', pgHtml);
+      // Re-bind (insertAdjacentHTML puts it after container, need to find it)
+      var pgBar = container.parentElement.querySelector('.pagination-bar');
+      if (pgBar) {
+        pgBar.querySelectorAll('button[data-pg="dedup"]').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            dedupState.currentPage = parseInt(btn.dataset.page);
+            renderGroups();
+            container.scrollTop = 0;
+          });
+        });
+        var sel = pgBar.querySelector('select[data-pg-rowsper="dedup"]');
+        if (sel) {
+          sel.addEventListener('change', function() {
+            dedupState.rowsPerPage = parseInt(sel.value) || 200;
+            dedupState.currentPage = 1;
+            renderGroups();
+          });
+        }
+      }
+    }
     $("dedupGroupCount").textContent = visibleKeys.length;
 
     $("dedupApplyBtn").disabled = false;

@@ -1747,3 +1747,75 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   gap: 8px;
   margin-top: 2px;
 }
+
+/* ═══ 分页控件 ═══ */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  border-top: 1px solid rgba(255,255,255,0.06);
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+.pagination-info {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.pagination-controls button {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  color: var(--text-secondary);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-width: 28px;
+  text-align: center;
+}
+.pagination-controls button:hover:not(:disabled) {
+  background: rgba(124,140,248,0.12);
+  border-color: var(--accent);
+  color: var(--text);
+}
+.pagination-controls button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.pagination-controls button.pg-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.pagination-controls .pg-ellipsis {
+  padding: 2px 4px;
+  color: var(--text-muted);
+  user-select: none;
+}
+.pagination-rowsper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pagination-rowsper select {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  outline: none;
+  cursor: pointer;
+}
+.pagination-rowsper select:focus {
+  border-color: var(--accent);
+}

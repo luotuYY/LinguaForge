@@ -21,7 +21,9 @@ const state = {
   llmProvider: 'local',       // 'local' | 'commercial'
   compareChecked: new Set(),
   files: [],                   // [{name, checked}] 来源文件管理
-  previewRowLimit: 2000,       // 预览行数上限
+  previewRowLimit: 200,        // 每页行数（分页模式）
+  previewPage: 1,              // 当前页码
+  comparePage: 1,              // 对比表当前页码
   translateStarted: false,     // 是否过翻译任务（用于区分「翻译全部」和「继续翻译」）
 };
 // ── 索引重建（数组增删后调用） ──

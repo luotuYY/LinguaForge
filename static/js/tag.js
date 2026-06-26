@@ -1,4 +1,4 @@
-﻿/**
+/**
  * LinguaForge - 分词/标签模块
  * 文本分类、LLM 分词、卡片拖拽排序、标签管理、导入翻译
  * Depends on: utils.js, db.js, state.js, api.js, render.js, app.js
@@ -8,7 +8,7 @@ import { $, escHtml, showToast, log, logChunk, setHighlight, hl, matches } from 
 import { dbGet, dbSet, dbHas } from './db.js';
 import { state, rebuildIndicesAndCheckboxes, updateTranslateAllButton } from './state.js';
 import { renderFileList } from './api.js';
-import { renderPreview, renderCompare } from './render.js';
+import { renderPreview, renderCompare, _renderPagination, _bindPagination } from './render.js';
 import { switchPage } from './app.js';
 
 // ── 分词页状态 ──
@@ -19,7 +19,9 @@ var tagState = {
   translating: false,
   abort: false,
   query: '',
-  previewRowLimit: 2000,
+  previewRowLimit: 200,
+  previewPage: 1,
+  columnsPage: 1,
   tagStarted: false,  // 是否过分词任务(用于区分「开始」和「继续」)
   _tagCounts: null,  // 缓存分类计数，避免每次O(n) filter
 };
@@ -210,24 +212,8 @@ function tagToggleCollapse() {
 }
 
 // ── 预览行数限制 ──
-function tagOnRowLimitChange() {
-  var sel = document.getElementById('tagPreviewRowLimit');
-  var custom = document.getElementById('tagPreviewCustomLimit');
-  if (!sel) return;
-  var val = sel.value;
-  if (val === '-2') { sel.style.display='none'; if(custom){custom.style.display='inline-block';custom.focus();} return; }
-  tagState.previewRowLimit = (val === '-1') ? 0 : (parseInt(val) || 2000);
-  if (custom) custom.style.display='none';
-  if (sel) sel.style.display='inline-block';
-  tagRenderPreview();
-  tagRenderColumns();
-}
-function tagOnCustomLimitChange() {
-  var c = document.getElementById('tagPreviewCustomLimit');
-  if (!c) return;
-  var v = parseInt(c.value);
-  if (v > 0) { tagState.previewRowLimit = v; tagRenderPreview(); tagRenderColumns(); }
-}
+function tagOnRowLimitChange() { tagRenderPreview(); tagRenderColumns(); }
+function tagOnCustomLimitChange() {}
 
 // ── 预览列表 ──
 function tagRenderPreview() {
@@ -238,25 +224,30 @@ function tagRenderPreview() {
     return !l.file || checkedFiles.indexOf(l.file) >= 0;
   });
   var lines = filtered.slice();
-  var limit = tagState.previewRowLimit || 0;
-  if (limit > 0 && lines.length > limit) lines = lines.slice(0, limit);
   if (q) {
     lines = lines.filter(function(l) {
       return matches(l.original, q) || matches(l.translation, q) || matches(l.tag_l2, q);
     });
   }
+  var total = lines.length;
+  var perPage = tagState.previewRowLimit || 200;
+  var totalPages = Math.max(1, Math.ceil(total / perPage));
+  if (tagState.previewPage > totalPages) tagState.previewPage = totalPages;
+  if (tagState.previewPage < 1) tagState.previewPage = 1;
+  var start = (tagState.previewPage - 1) * perPage;
+  var pageLines = lines.slice(start, start + perPage);
   if (tagState.lines.length === 0) {
     document.getElementById('tagPreview').innerHTML = '<div class="empty-state">请先上传 txt 文件</div>';
     document.getElementById('tagPreviewCount').textContent = '0 行';
     return;
   }
-  if (q && lines.length === 0) {
+  if (q && total === 0) {
     document.getElementById('tagPreview').innerHTML = '<div class="empty-state">无匹配结果</div>';
     document.getElementById('tagPreviewCount').textContent = '0 条匹配';
     return;
   }
   var html = '<div class="line-list">';
-  lines.forEach(function(l) {
+  pageLines.forEach(function(l) {
     var tagBadge = '';
     if (l.tag_l1) {
       var cat = getEnabledSchema()[l.tag_l1];
@@ -273,8 +264,10 @@ function tagRenderPreview() {
     '</div>';
   });
   html += '</div>';
+  html += _renderPagination(total, perPage, tagState.previewPage, 'tag-preview');
   document.getElementById('tagPreview').innerHTML = html;
-  document.getElementById('tagPreviewCount').textContent = q ? lines.length + ' 条匹配' : filtered.length + ' 行';
+  _bindPagination('tagPreview', 'tag-preview');
+  document.getElementById('tagPreviewCount').textContent = q ? total + ' 条匹配' : filtered.length + ' 行';
 }
 
 // ── 分类栏（显示条数与预览下拉同步） ──
@@ -284,7 +277,8 @@ function tagRenderColumns() {
   if (!container) return;
   var schema = getEnabledSchema();
   var validL1 = Object.keys(schema);
-  var displayLimit = tagState.previewRowLimit || 0;
+  var perPage = tagState.previewRowLimit || 200;
+  var colPage = tagState.columnsPage || 1;
   // 清洗数据：将不属于当前 schema 的词条重置为未分类
   tagState.lines.forEach(function(l) {
     if (l.tag_l1 && validL1.indexOf(l.tag_l1) === -1) {
@@ -304,7 +298,10 @@ function tagRenderColumns() {
   Object.keys(schema).forEach(function(l1) {
     var cat = schema[l1];
     var items = tagState.lines.filter(function(l) { return l.tag_l1 === l1; });
-    var shown = displayLimit > 0 ? items.slice(0, displayLimit) : items;
+    var totalPages = Math.max(1, Math.ceil(items.length / perPage));
+    if (colPage > totalPages) colPage = totalPages;
+    var cs = (colPage - 1) * perPage;
+    var shown = items.slice(cs, cs + perPage);
     html += '<div class="tag-column" data-l1="' + l1 + '">' +
       '<div class="tag-column-header" style="border-left:3px solid ' + cat.color + '">' +
       '<span class="tag-col-icon">' + cat.icon + '</span>' +
@@ -313,13 +310,16 @@ function tagRenderColumns() {
       '<div class="tag-column-body" data-l1="' + l1 + '" ' +
       'data-action="tag-column-body">';
     shown.forEach(function(l) { html += tagRenderCard(l); });
-    if (displayLimit > 0 && items.length > displayLimit) html += '<div class="tag-column-empty">…还有 ' + (items.length - displayLimit) + ' 条</div>';
+    if (items.length > perPage) html += '<div class="tag-column-empty">…还有 ' + (items.length - shown.length) + ' 条</div>';
     if (items.length === 0) html += '<div class="tag-column-empty">拖入词条或运行分词</div>';
     html += '</div></div>';
   });
   var untagged = tagState.lines.filter(function(l) { return !l.tag_l1; });
-  var untaggedLimit = tagState.previewRowLimit || 0;
-  var unShown = untaggedLimit > 0 ? untagged.slice(0, untaggedLimit) : untagged;
+  var untaggedLimit = tagState.previewRowLimit || 200;
+  var uTotalPages = Math.max(1, Math.ceil(untagged.length / untaggedLimit));
+  var uPage = colPage > uTotalPages ? uTotalPages : colPage;
+  var us = (uPage - 1) * untaggedLimit;
+  var unShown = untagged.slice(us, us + untaggedLimit);
   html += '<div class="tag-column tag-column-untagged">' +
     '<div class="tag-column-header" style="border-left:3px solid #888">' +
     '<span class="tag-col-icon">📋</span><span class="tag-col-title">未分类</span>' +
@@ -327,10 +327,19 @@ function tagRenderColumns() {
     '<div class="tag-column-body" data-l1="" ' +
     'data-action="tag-column-body">';
   unShown.forEach(function(l) { html += tagRenderCard(l); });
-  if (untaggedLimit > 0 && untagged.length > untaggedLimit) html += '<div class="tag-column-empty">…还有 ' + (untagged.length - untaggedLimit) + ' 条</div>';
+  if (untagged.length > untaggedLimit) html += '<div class="tag-column-empty">…还有 ' + (untagged.length - unShown.length) + ' 条</div>';
   if (untagged.length === 0 && tagState.lines.length > 0) html += '<div class="tag-column-empty">所有词条已分类 ✓</div>';
   html += '</div></div>';
   container.innerHTML = html;
+  // 分页控件
+  var totalItems = tagState.lines.length;
+  if (totalItems > perPage) {
+    var pgHtml = _renderPagination(totalItems, perPage, colPage, 'tag-columns');
+    var pgDiv = document.createElement('div');
+    pgDiv.innerHTML = pgHtml;
+    container.parentElement.appendChild(pgDiv.firstChild);
+    _bindPagination(container.parentElement.id || 'tagColumns', 'tag-columns');
+  }
   // 如果分类标签面板处于展开状态,同步刷新
   var catPanel = document.getElementById('tagCatPanel');
   if (catPanel && catPanel.classList.contains('visible')) tagRenderCatPanel();

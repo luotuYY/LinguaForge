@@ -1,4 +1,4 @@
-﻿/**
+/**
  * LinguaForge — 渲染层
  * 预览列表、对比表格的 DOM 渲染，搜索 UI，复选框/排序状态管理
  * Depends on: utils.js, state.js
@@ -144,6 +144,13 @@ function renderCompare() {
     } else if (curSort === 2) {
       rows.sort(function (a, b) { return naturalCompare(a.new_translation || '', b.new_translation || ''); });
     }
+    var total = rows.length;
+    var perPage = state.previewRowLimit || 200;
+    var totalPages = Math.max(1, Math.ceil(total / perPage));
+    if (state.comparePage > totalPages) state.comparePage = totalPages;
+    if (state.comparePage < 1) state.comparePage = 1;
+    var start = (state.comparePage - 1) * perPage;
+    var pageRows = rows.slice(start, start + perPage);
     var compareHtml = '<table class="compare-table"><thead><tr>' +
       '<th class="col-check"><input type="checkbox" id="selectAllCompare" data-action="toggle-select-all-compare" title="全选/取消筛选结果"></th>' +
       '<th class="col-orig">原文</th>' +
@@ -151,7 +158,7 @@ function renderCompare() {
       '<th class="col-new">新译文 <button class="btn btn-sm" data-action="clear-new-without-old" title="清空所有无旧译文词条的新译文" style="font-size:0.68rem;padding:1px 6px">清</button></th>' +
       '<th class="col-actions"></th>' +
     '</tr></thead><tbody>';
-    rows.forEach(function (l) {
+    pageRows.forEach(function (l) {
       var rowCls = (l.error ? 'row-error' : '') + (l.keepOld ? ' row-keep' : '');
       compareHtml += '<tr class="' + rowCls + '" data-row-index="' + l.index + '">' +
         '<td class="col-check"><input type="checkbox" class="row-check" data-index="' + l.index + '" data-action="compare-check" ' + (state.compareChecked.has(l.index) ? 'checked' : '') + '></td>' +
@@ -171,7 +178,9 @@ function renderCompare() {
       '</tr>';
     });
     compareHtml += '</tbody></table>';
+    compareHtml += _renderPagination(total, perPage, state.comparePage, 'compare');
     $('cardCompare').innerHTML = compareHtml;
+    _bindPagination('cardCompare', 'compare');
   }
   if (q) $('compareSearchCount').textContent = shown + ' 条匹配';
   updateSelectAllCompare();
@@ -218,10 +227,13 @@ function updateSelectAllPreview() {
     });
   } else {
     visible = state.lines;
-    if (state.previewRowLimit > 0 && visible.length > state.previewRowLimit) {
-      visible = visible.slice(0, state.previewRowLimit);
-    }
   }
+  // Only consider current page
+  var perPage = state.previewRowLimit || 200;
+  var totalPages = Math.max(1, Math.ceil(visible.length / perPage));
+  if (state.previewPage > totalPages) state.previewPage = totalPages;
+  var start = (state.previewPage - 1) * perPage;
+  visible = visible.slice(start, start + perPage);
   if (!visible.length) return;
   var allIndices = new Set();
   visible.forEach(function (l) { allIndices.add(l.index); });
@@ -276,44 +288,103 @@ function getCheckedRows() {
   return state.lines.filter(function (l) { return state.compareChecked.has(l.index); });
 }
 
-// ── 预览行数限制 ──
-function onPreviewRowLimitChange() {
-  var sel = document.getElementById('previewRowLimit');
-  var custom = document.getElementById('previewCustomLimit');
-  if (!sel) return;
-  var val = sel.value;
-  if (val === '-2') {
-    // 自定：隐藏下拉，显示输入框
-    sel.style.display = 'none';
-    if (custom) { custom.style.display = 'inline-block'; custom.focus(); }
-    return;
-  }
-  if (val === '-1') {
-    // 全部
-    state.previewRowLimit = 0;
-  } else {
-    state.previewRowLimit = parseInt(val) || 2000;
-  }
-  if (custom) custom.style.display = 'none';
-  if (sel) sel.style.display = 'inline-block';
-  renderPreview();
+// ── 分页控件渲染 ──
+function _renderPagination(total, perPage, currentPage, pageKey) {
+  if (total <= perPage) return '';
+  var totalPages = Math.ceil(total / perPage);
+  var start = (currentPage - 1) * perPage + 1;
+  var end = Math.min(currentPage * perPage, total);
+
+  var html = '<div class="pagination-bar">';
+  html += '<span class="pagination-info">' + start + '-' + end + ' / ' + total + ' 条</span>';
+  html += '<div class="pagination-controls">';
+  // 上一页
+  html += '<button data-pg="' + pageKey + '" data-page="' + (currentPage - 1) + '"' + (currentPage <= 1 ? ' disabled' : '') + '>&laquo;</button>';
+  // 页码
+  var pages = _calcPageRange(currentPage, totalPages);
+  pages.forEach(function (p) {
+    if (p === '...') {
+      html += '<span class="pg-ellipsis">...</span>';
+    } else {
+      html += '<button data-pg="' + pageKey + '" data-page="' + p + '"' + (p === currentPage ? ' class="pg-active"' : '') + '>' + p + '</button>';
+    }
+  });
+  // 下一页
+  html += '<button data-pg="' + pageKey + '" data-page="' + (currentPage + 1) + '"' + (currentPage >= totalPages ? ' disabled' : '') + '>&raquo;</button>';
+  html += '</div>';
+  html += '<div class="pagination-rowsper">';
+  html += '<select data-pg-rowsper="' + pageKey + '">';
+  [200, 500, 1000, 2000].forEach(function (n) {
+    html += '<option value="' + n + '"' + (perPage === n ? ' selected' : '') + '>' + n + '</option>';
+  });
+  html += '</select>';
+  html += '</div>';
+  html += '</div>';
+  return html;
 }
 
-function onPreviewCustomLimitChange() {
-  var custom = document.getElementById('previewCustomLimit');
-  if (!custom) return;
-  var v = parseInt(custom.value);
-  if (v > 0) {
-    state.previewRowLimit = v;
-    renderPreview();
+function _calcPageRange(cur, total) {
+  if (total <= 7) {
+    var arr = [];
+    for (var i = 1; i <= total; i++) arr.push(i);
+    return arr;
+  }
+  var pages = [1];
+  if (cur > 3) pages.push('...');
+  for (var i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) {
+    pages.push(i);
+  }
+  if (cur < total - 2) pages.push('...');
+  pages.push(total);
+  return pages;
+}
+
+function _bindPagination(containerId, pageKey) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  container.querySelectorAll('button[data-pg="' + pageKey + '"]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var page = parseInt(btn.dataset.page);
+      if (page < 1) return;
+      if (pageKey === 'preview') { state.previewPage = page; renderPreview(); }
+      else if (pageKey === 'compare') { state.comparePage = page; renderCompare(); }
+      else if (pageKey === 'tag-preview') { tagState.previewPage = page; tagRenderPreview(); }
+      else if (pageKey === 'tag-columns') { tagState.columnsPage = page; tagRenderColumns(); }
+      else if (pageKey === 'dedup') { dedupState.currentPage = page; renderGroups(); }
+      // 滚动到容器顶部
+      var el = document.getElementById(containerId);
+      if (el) el.scrollTop = 0;
+    });
+  });
+  var sel = container.querySelector('select[data-pg-rowsper="' + pageKey + '"]');
+  if (sel) {
+    sel.addEventListener('change', function () {
+      var val = parseInt(sel.value) || 200;
+      if (pageKey === 'preview' || pageKey === 'compare') {
+        state.previewRowLimit = val;
+        state.previewPage = 1;
+        state.comparePage = 1;
+        renderPreview();
+        renderCompare();
+      } else if (pageKey === 'tag-preview' || pageKey === 'tag-columns') {
+        tagState.previewRowLimit = val;
+        tagState.previewPage = 1;
+        tagState.columnsPage = 1;
+        tagRenderPreview();
+        tagRenderColumns();
+      } else if (pageKey === 'dedup') {
+        dedupState.rowsPerPage = val;
+        dedupState.currentPage = 1;
+        renderGroups();
+      }
+    });
   }
 }
 
-function initPreviewRowLimit() {
-  var sel = document.getElementById('previewRowLimit');
-  if (sel) sel.value = '2000';
-  state.previewRowLimit = 2000;
-}
+// ── 旧版行数限制（兼容） ──
+function onPreviewRowLimitChange() { renderPreview(); }
+function onPreviewCustomLimitChange() {}
+function initPreviewRowLimit() { state.previewRowLimit = 200; }
 
 // ── 增量追加单行到对比表（批量更新专用，不触发全量重建） ──
 function _appendCompareRow(l) {
@@ -443,6 +514,6 @@ var _batchUpdating = false;
 function setBatchUpdating(v) { _batchUpdating = v; }
 
 // ── Module exports ──
-export { renderInternal, getCheckedFileNames, updateSearchUI, renderPreview, updatePreviewLine, toggleSort, renderCompare, updatePreviewSelectAllVisibility, onPreviewCheck, toggleSelectAllPreview, updateSelectAllPreview, getCheckedPreviewIndices, onCompareCheck, toggleSelectAllCompare, updateSelectAllCompare, getCheckedRows, onPreviewRowLimitChange, onPreviewCustomLimitChange, initPreviewRowLimit, updateCompareRow, _appendCompareRow, setBatchUpdating };
+export { renderInternal, getCheckedFileNames, updateSearchUI, renderPreview, updatePreviewLine, toggleSort, renderCompare, updatePreviewSelectAllVisibility, onPreviewCheck, toggleSelectAllPreview, updateSelectAllPreview, getCheckedPreviewIndices, onCompareCheck, toggleSelectAllCompare, updateSelectAllCompare, getCheckedRows, onPreviewRowLimitChange, onPreviewCustomLimitChange, initPreviewRowLimit, updateCompareRow, _appendCompareRow, setBatchUpdating, _renderPagination, _bindPagination };
 
 // ── Window bindings (HTML onclick compat) ──
