@@ -938,7 +938,7 @@ function tagEditFilter() {
   var matchItems = getAllSubCategories().filter(function(s){ return s.label.toLowerCase().indexOf(q)>=0 || s.l2.toLowerCase().indexOf(q)>=0; });
   if (matchItems.length===0) { dd.style.display='none'; return; }
   var editSchema = getEnabledSchema();
-  var h=''; matchItems.forEach(function(s){ h+='<div class="tag-edit-option" data-action="tag-edit-pick" data-l1="\''+s.l1+'\'" data-l2="\''+s.l2+'\'"><span style="color:'+(editSchema[s.l1]?editSchema[s.l1].color:'#888')+'">'+escHtml(s.l1)+'</span> / '+escHtml(s.l2)+'</div>'; });
+  var h=''; matchItems.forEach(function(s){ h+='<div class="tag-edit-option" data-action="tag-edit-pick" data-l1="'+s.l1+'" data-l2="'+s.l2+'"><span style="color:'+(editSchema[s.l1]?editSchema[s.l1].color:'#888')+'">'+escHtml(s.l1)+'</span> / '+escHtml(s.l2)+'</div>'; });
   dd.innerHTML=h; dd.style.display='block';
 }
 function tagEditPick(l1,l2) {
@@ -1393,7 +1393,7 @@ function tagTriggerDownload(name, content) {
   var blob = new Blob([content],{type:'text/plain;charset=utf-8'});
   var url = URL.createObjectURL(blob);
   var a = document.createElement('a'); a.href=url; a.download=name; a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(function(){URL.revokeObjectURL(url);},5000);
 }
 
 // ── 搜索(分词页) ──
@@ -1824,6 +1824,7 @@ function tagAdminPoolEdit(e, el) {
       if (idx !== -1) { pool[idx] = newName; saveSubPool(pool); }
     }
     var span = document.createElement('span'); span.className = 'tag-admin-pool-text'; span.textContent = newName || oldName; input.replaceWith(span);
+    _adminPreview();
     
   }
   input.addEventListener('blur', commit);
@@ -1988,7 +1989,7 @@ function tagAdminExport() {
   a.href = url;
   a.download = 'tag_schema.json';
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(function(){URL.revokeObjectURL(url);},5000);
   showToast('已导出标签体系');
 }
 
