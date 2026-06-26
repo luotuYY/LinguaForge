@@ -22,7 +22,7 @@ import { renderInternal, getCheckedFileNames, renderPreview, renderCompare, upda
 import { setProvider, setMode, saveModeParams, saveApiConfig, testApiConnection,
           onThinkingChange, togglePrompt, resetSystemPrompt, savePolishStrategy,
           onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt,
-          exportPrompts, importPrompts, resetParamDefault } from './state.js';
+          exportPrompts, importPrompts, resetInputDefault } from './state.js';
 import { onPreviewRowLimitChange, onPreviewCustomLimitChange, initPreviewRowLimit, toggleSort } from './render.js';
 import { tagInit, tagLoadManualInput, tagClearAll, tagOnSearch, tagOnRowLimitChange, tagOnCustomLimitChange,
           tagStart, tagStop, tagExportDialog, tagImportDialog, tagToggleCatPanel, tagToggleStrategy,
@@ -762,21 +762,18 @@ function triggerDownload(filename, fcontent) {
   _bind('previewRowLimit', 'change', onPreviewRowLimitChange);
   _bind('previewCustomLimit', 'change', onPreviewCustomLimitChange);
 
-  // ── 翻译页：双击恢复默认参数（仅翻译页的 .param-row） ──
+  // ── 翻译页：双击恢复默认参数（统一 resetInputDefault） ──
   var translateParamRow = document.querySelector('#page-translate .param-row');
   if (translateParamRow) {
     translateParamRow.querySelectorAll('label + input[type="number"]').forEach(function(input) {
-      input.addEventListener('dblclick', function() { resetParamDefault(input); });
+      input.addEventListener('dblclick', function() { resetInputDefault(input, function() { saveModeParams(state.translateMode); }); });
     });
   }
-  // 翻译页并发数双击重置（不在 .param-row 内）
+  // 翻译页并发数双击重置
   var concurrencyEl = document.getElementById('concurrency');
   if (concurrencyEl) {
     concurrencyEl.addEventListener('dblclick', function() {
-      concurrencyEl.value = '5';
-      if (window.getSelection) window.getSelection().removeAllRanges();
-      concurrencyEl.blur();
-      dbSet('tllmh_concurrency', '5');
+      resetInputDefault(concurrencyEl, function() { dbSet('tllmh_concurrency', concurrencyEl.value); });
     });
     // 持久化并发数
     concurrencyEl.addEventListener('blur', function() {

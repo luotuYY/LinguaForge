@@ -6,7 +6,7 @@
 
 import { $, escHtml, showToast, log, logChunk, setHighlight, hl, matches } from './utils.js';
 import { dbGet, dbSet, dbSetCache, dbHas, dbReady } from './db.js';
-import { state, rebuildIndicesAndCheckboxes, updateTranslateAllButton } from './state.js';
+import { state, rebuildIndicesAndCheckboxes, updateTranslateAllButton, resetInputDefault } from './state.js';
 import { renderFileList } from './api.js';
 import { renderPreview, renderCompare, _renderPagination, _bindPagination } from './render.js';
 import { switchPage } from './app.js';
@@ -2330,14 +2330,19 @@ async function tagInit() {
     if (concEl) concEl.value = savedConcurrency;
   }
   var concInput = document.getElementById('tagConcurrency');
-  if (concInput) concInput.addEventListener('blur', function() { dbSet('tllmh_tag_concurrency', parseInt(concInput.value) || 5); });
+  if (concInput) {
+    concInput.addEventListener('blur', function() { dbSet('tllmh_tag_concurrency', parseInt(concInput.value) || 5); });
+    concInput.addEventListener('dblclick', function() {
+      resetInputDefault(concInput, function() { dbSet('tllmh_tag_concurrency', parseInt(concInput.value) || 5); });
+    });
+  }
 
   // LLM 参数持久化
   var tagLLMParams = dbGet('tllmh_tag_params', {});
   var tagParamMap = [
-    { id: 'tagTemperature', key: 'temperature', def: '0.1' },
-    { id: 'tagTopP', key: 'top_p', def: '0.6' },
-    { id: 'tagMaxTokens', key: 'max_tokens', def: '512' },
+    { id: 'tagTemperature', key: 'temperature' },
+    { id: 'tagTopP', key: 'top_p' },
+    { id: 'tagMaxTokens', key: 'max_tokens' },
   ];
   tagParamMap.forEach(function(cfg) {
     var el = document.getElementById(cfg.id);
@@ -2349,12 +2354,11 @@ async function tagInit() {
       dbSet('tllmh_tag_params', p);
     });
     el.addEventListener('dblclick', function() {
-      el.value = cfg.def;
-      if (window.getSelection) window.getSelection().removeAllRanges();
-      el.blur();
-      var p = dbGet('tllmh_tag_params', {});
-      p[cfg.key] = el.value;
-      dbSet('tllmh_tag_params', p);
+      resetInputDefault(el, function() {
+        var p = dbGet('tllmh_tag_params', {});
+        p[cfg.key] = el.value;
+        dbSet('tllmh_tag_params', p);
+      });
     });
   });
 

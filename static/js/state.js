@@ -104,21 +104,44 @@ function setPolishStep2Prompt(text) {
   else { dbDel('tllmh_polish_step2'); }
 }
 
-// ── LLM 参数持久化 ──
-function resetParamDefault(el) {
-  var defaults = { temperature: '0.7', top_p: '0.6', max_tokens: '1024', repetition_penalty: '1.05' };
-  if (defaults[el.id]) el.value = defaults[el.id];
+// ── LLM 参数默认值注册表（全局统一） ──
+// 所有页面的 LLM 参数默认值集中管理，双击恢复默认时从这里读取
+var LLM_PARAM_DEFAULTS = {
+  // 翻译页
+  temperature:          '0.7',
+  top_p:                '0.6',
+  max_tokens:           '1024',
+  repetition_penalty:   '1.05',
+  concurrency:          '5',
+  // 去重页
+  dedupTemperature:     '0.1',
+  dedupTopP:            '0.6',
+  dedupMaxTokens:       '10',
+  dedupRepPenalty:      '1.0',
+  dedupConcurrency:     '5',
+  // 分词页
+  tagTemperature:       '0.1',
+  tagTopP:              '0.6',
+  tagMaxTokens:         '512',
+  tagConcurrency:       '5',
+};
+
+// ── 统一的双击恢复默认函数 ──
+// el: input DOM 元素
+// saveFn: 可选，恢复后触发的持久化回调
+function resetInputDefault(el, saveFn) {
+  var def = LLM_PARAM_DEFAULTS[el.id];
+  if (def != null) el.value = def;
   if (window.getSelection) window.getSelection().removeAllRanges();
   el.blur();
-  if (_modeReady) saveModeParams(state.translateMode);
+  if (typeof saveFn === 'function') saveFn();
 }
 
-// ── 去重页参数双击重置 ──
-function resetDedupParamDefault(el) {
-  var defaults = { dedupTemperature: '0.1', dedupTopP: '0.6', dedupMaxTokens: '10', dedupRepPenalty: '1.0' };
-  if (defaults[el.id]) el.value = defaults[el.id];
-  if (window.getSelection) window.getSelection().removeAllRanges();
-  el.blur();
+// ── 便捷：翻译页参数双击重置（兼容旧调用） ──
+function resetParamDefault(el) {
+  resetInputDefault(el, function() {
+    if (_modeReady) saveModeParams(state.translateMode);
+  });
 }
 
 function saveModeParams(mode) {
@@ -749,4 +772,4 @@ document.addEventListener('visibilitychange', function () {
 });
 
 // ── Module exports ──
-export { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, DIRECT_DEFAULT, POLISH_DIRECT_DEFAULT, POLISH_STEP2_DEFAULT, getPolishStep2Prompt, setPolishStep2Prompt, resetParamDefault, resetDedupParamDefault, saveModeParams, loadModeParams, getLLMParams, setMode, updateTranslateAllButton, getApiConfig, loadApiConfig, saveApiConfig, testApiConnection, setProvider, onThinkingChange, checkLLM, loadDefaults, savePolishStrategy, showPromptBar, onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt, renderSavedPrompts, togglePrompt, resetSystemPrompt, exportPrompts, importPrompts, updateManualBtn, updateRetryButton, updateExportCheckedButton, promptKey };
+export { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, DIRECT_DEFAULT, POLISH_DIRECT_DEFAULT, POLISH_STEP2_DEFAULT, getPolishStep2Prompt, setPolishStep2Prompt, LLM_PARAM_DEFAULTS, resetInputDefault, resetParamDefault, saveModeParams, loadModeParams, getLLMParams, setMode, updateTranslateAllButton, getApiConfig, loadApiConfig, saveApiConfig, testApiConnection, setProvider, onThinkingChange, checkLLM, loadDefaults, savePolishStrategy, showPromptBar, onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt, renderSavedPrompts, togglePrompt, resetSystemPrompt, exportPrompts, importPrompts, updateManualBtn, updateRetryButton, updateExportCheckedButton, promptKey };

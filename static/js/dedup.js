@@ -4,7 +4,7 @@
 
 import { $, escHtml, showToast } from './utils.js';
 import { _renderPagination } from './render.js';
-import { state, getApiConfig, resetDedupParamDefault } from './state.js';
+import { state, getApiConfig, resetInputDefault } from './state.js';
 import { dbGet, dbSet, dbReady } from './db.js';
 
 var dedupState = {
@@ -891,21 +891,18 @@ async function init() {
     _bindChange("dedupRepPenalty", saveDedupParams);
     _bindChange("dedupConcurrency", saveDedupParams);
 
-    // 双击恢复默认值
+    // 双击恢复默认值（统一 resetInputDefault）
     var dedupParamRow = document.querySelector('#page-dedup .param-row');
     if (dedupParamRow) {
       dedupParamRow.querySelectorAll('label + input[type="number"]').forEach(function(input) {
-        input.addEventListener('dblclick', function() { resetDedupParamDefault(input); saveDedupParams(); });
+        input.addEventListener('dblclick', function() { resetInputDefault(input, saveDedupParams); });
       });
     }
-    // 去重页并发数双击重置（不在 .param-row 内）
+    // 去重页并发数双击重置
     var dedupConcurrencyEl = document.getElementById('dedupConcurrency');
     if (dedupConcurrencyEl) {
       dedupConcurrencyEl.addEventListener('dblclick', function() {
-        dedupConcurrencyEl.value = String(DEDUP_DEFAULTS.concurrency);
-        if (window.getSelection) window.getSelection().removeAllRanges();
-        dedupConcurrencyEl.blur();
-        saveDedupParams();
+        resetInputDefault(dedupConcurrencyEl, saveDedupParams);
       });
     }
 }
