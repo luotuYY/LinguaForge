@@ -5,7 +5,7 @@
  */
 
 
-import { $, escHtml, showToast, log, naturalCompare, fallbackCopy } from './utils.js';
+import { $, escHtml, showToast, log, clearLog, naturalCompare, fallbackCopy } from './utils.js';
 import { dbGet, dbSet } from './db.js';
 import { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, 
           updateTranslateAllButton, updateRetryButton, updateExportCheckedButton,
