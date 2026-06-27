@@ -324,6 +324,7 @@
       <div class="card-header">🔄 LLM 评估</div>
       <div class="card-body" id="cardDedupEval">
         <div class="dedup-controls">
+          <span id="dedupRuntimeDisplay" style="display:none;font-size:0.72rem;color:var(--accent);margin-right:8px">00:00</span>
           <button class="btn" id="dedupBtnStop" disabled>停止</button>
           <span style="font-size:0.78rem;color:var(--text-muted);cursor:pointer" title="同时评估的重复组数。越大越快，但可能触发限流&#10;推荐 3~5&#10;双击恢复默认">并发</span>
           <input type="number" id="dedupConcurrency" value="5" min="1" max="10" class="param-input" style="width:42px">

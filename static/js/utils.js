@@ -73,31 +73,36 @@ function showToast(msg) {
 }
 
 // ── Activity Log ──
-function log(msg, cls, prepend) {
-  const logArea = $('logArea');
-  if (!logArea) return;
-  logArea.classList.add('visible');
-  const now = new Date();
-  const ts = now.getHours().toString().padStart(2, '0') + ':' +
+// ── 统一的日志工厂（所有页面共享） ──
+function createLogger(containerId, maxLines) {
+  maxLines = maxLines || 100;
+  function log(msg, cls) {
+    var area = $(containerId);
+    if (!area) return;
+    area.classList.add('visible');
+    var now = new Date();
+    var ts = now.getHours().toString().padStart(2, '0') + ':' +
              now.getMinutes().toString().padStart(2, '0') + ':' +
              now.getSeconds().toString().padStart(2, '0');
-  const line = document.createElement('div');
-  line.className = 'log-line';
-  line.innerHTML = '<span class="ts">' + ts + '</span><span class="' + (cls || '') + '">' + escHtml(msg) + '</span>';
-  if (prepend) {
-    logArea.insertBefore(line, logArea.firstChild);
-  } else {
-    logArea.appendChild(line);
-    while (logArea.children.length > 200) { logArea.removeChild(logArea.firstChild); }
-    logArea.scrollTop = logArea.scrollHeight;
+    var line = document.createElement('div');
+    line.className = 'log-line';
+    line.innerHTML = '<span class="ts">' + ts + '</span><span class="' + (cls || '') + '">' + escHtml(msg) + '</span>';
+    area.appendChild(line);
+    while (area.children.length > maxLines) { area.removeChild(area.firstChild); }
+    area.scrollTop = area.scrollHeight;
   }
+  function clear() {
+    var area = $(containerId);
+    if (!area) return;
+    area.innerHTML = '';
+    area.classList.remove('visible');
+  }
+  return { log: log, clear: clear };
 }
-function clearLog() {
-  const logArea = $('logArea');
-  if (!logArea) return;
-  logArea.innerHTML = '';
-  logArea.classList.remove('visible');
-}
+
+var _translateLogger = createLogger('logArea', 100);
+var log = _translateLogger.log;
+var clearLog = _translateLogger.clear;
 
 // ── Custom Confirm Modal (replaces native confirm) ──
 function showConfirm(msg) {
@@ -195,6 +200,6 @@ function showConfirm(msg) {
 })();
 
 // ── Module exports ──
-export { $, escHtml, escRegex, setHighlight, hl, matches, fallbackCopy, naturalCompare, showToast, log, clearLog, showConfirm };
+export { $, escHtml, escRegex, setHighlight, hl, matches, fallbackCopy, naturalCompare, showToast, log, clearLog, showConfirm, createLogger };
 
 // ── Window bindings (HTML onclick compat) ──

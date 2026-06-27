@@ -2,7 +2,7 @@
  * LinguaForge — 去重模块
  */
 
-import { $, escHtml, showToast } from './utils.js';
+import { $, escHtml, showToast, createLogger } from './utils.js';
 import { _renderPagination } from './render.js';
 import { state, getApiConfig, resetInputDefault } from './state.js';
 import { dbGet, dbSet, dbReady } from './db.js';
@@ -78,27 +78,23 @@ function resetDedupStrategy() {
     dedupLog("已恢复默认评估策略");
 }
 
-// ── 日志 ──
-function dedupLog(msg, cls) {
-    var area = $("dedupLogArea");
-    if (!area) return;
-    area.style.display = "flex";
-    area.style.flexDirection = "column";
-    var time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
-    var body = escHtml(msg);
-    if (cls) { body = '<span class="' + cls + '">' + body + "</span>"; }
-    area.innerHTML +=
-      '<div class="log-line"><span class="log-time">' + time + "</span> " + body + "</div>";
-    area.scrollTop = area.scrollHeight;
-}
+// ── 去重日志（通过统一工厂创建） ──
+var _dedupLogger = createLogger('dedupLogArea', 100);
+var dedupLog = _dedupLogger.log;
+var clearDedupLog = _dedupLogger.clear;
 
-function clearDedupLog() {
-    var area = $("dedupLogArea");
-    if (area) {
-      area.innerHTML = "";
-      area.style.display = "none";
-    }
+// ── 运行时计时器 ──
+var _dedupT0 = 0, _dedupTmr = 0;
+function _dedupStartRuntime() {
+  _dedupT0 = Date.now(); var rd = $('dedupRuntimeDisplay');
+  if (rd) { rd.textContent = '00:00'; rd.style.display = 'inline'; }
+  _dedupTmr = setInterval(function () {
+    var s = Math.floor((Date.now() - _dedupT0) / 1000);
+    var m = Math.floor(s / 60);
+    if (rd) rd.textContent = (m < 10 ? '0' : '') + m + ':' + ((s % 60) < 10 ? '0' : '') + (s % 60);
+  }, 500);
 }
+function _dedupStopRuntime() { clearInterval(_dedupTmr); $('dedupRuntimeDisplay').style.display = 'none'; }
 
 // ── 条目工具 ──
 function _entryId(e) {
@@ -428,6 +424,7 @@ async function dedupStart() {
     $("dedupBtnStart").disabled = true;
     $("dedupBtnStop").disabled = false;
     clearDedupLog();
+    _dedupStartRuntime();
 
     // 筛选模式下只评估当前可见的组（译文不同的）
     var candidateKeys;
@@ -462,6 +459,7 @@ async function dedupStart() {
       dedupLog("所有 " + skippedCount + " 组条目均相同，无需评估");
       showToast("所有组条目均相同，无需评估");
       dedupState.evaluating = false;
+      _dedupStopRuntime();
       $("dedupBtnStart").disabled = false;
       $("dedupBtnStop").disabled = true;
       return;
@@ -571,6 +569,7 @@ async function dedupStart() {
     updateSelectedCount();
     dedupState.evaluating = false;
     dedupState.abort = false;
+    _dedupStopRuntime();
     $("dedupBtnStart").disabled = false;
     $("dedupBtnStop").disabled = true;
 };

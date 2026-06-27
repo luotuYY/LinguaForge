@@ -4,7 +4,7 @@
  * Depends on: utils.js, db.js, state.js, api.js, render.js, app.js
  */
 
-import { $, escHtml, showToast, setHighlight, hl, matches } from './utils.js';
+import { $, escHtml, showToast, setHighlight, hl, matches, createLogger } from './utils.js';
 import { dbGet, dbSet, dbSetCache, dbHas, dbReady } from './db.js';
 import { state, rebuildIndicesAndCheckboxes, updateTranslateAllButton, resetInputDefault } from './state.js';
 import { renderFileList } from './api.js';
@@ -1573,18 +1573,10 @@ function _tagStartRuntime() {
 }
 function _tagStopRuntime() { clearInterval(_tagTmr); document.getElementById('tagRuntimeDisplay').style.display='none'; }
 
-// ── 分词日志 ──
-function tagLog(msg, cls) {
-  var area = document.getElementById('tagLogArea'); if (!area) return;
-  area.classList.add('visible');
-  var now = new Date();
-  var ts = (now.getHours()<10?'0':'')+now.getHours()+':'+(now.getMinutes()<10?'0':'')+now.getMinutes()+':'+(now.getSeconds()<10?'0':'')+now.getSeconds();
-  var line = document.createElement('div'); line.className='log-line';
-  line.innerHTML = '<span class="ts">'+ts+'</span><span class="'+(cls||'')+'">'+escHtml(msg)+'</span>';
-  area.appendChild(line); while(area.children.length>100) area.removeChild(area.firstChild);
-  area.scrollTop = area.scrollHeight;
-}
-function tagLogClear() { var a=document.getElementById('tagLogArea'); if(a){a.innerHTML='';a.classList.remove('visible');} }
+// ── 分词日志（通过统一工厂创建） ──
+var _tagLogger = createLogger('tagLogArea', 100);
+var tagLog = _tagLogger.log;
+var tagLogClear = _tagLogger.clear;
 
 // ── 分类标签面板 ──
 function tagToggleCatPanel() {
