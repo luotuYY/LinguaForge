@@ -473,11 +473,11 @@ function _refreshComparePagination() {
     return;
   }
 
-  // 超过分页界限：跳转到最后一页
+  // 超过分页界限：保持当前页，更新分页条
   var totalPages = Math.ceil(total / perPage);
-  state.comparePage = totalPages;
-  var start = (totalPages - 1) * perPage;
-  var end = total;
+  if (state.comparePage > totalPages) state.comparePage = totalPages;
+  var start = (state.comparePage - 1) * perPage;
+  var end = state.comparePage * perPage;
   for (var i = 0; i < allRows.length; i++) {
     allRows[i].style.display = (i >= start && i < end) ? '' : 'none';
   }
