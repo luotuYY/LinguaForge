@@ -752,8 +752,7 @@ function updateRetryButton() {
   // btnRetrySelected 常亮，由 retrySelected() 自行处理无选中
 }
 function updateExportCheckedButton() {
-  var btn = document.getElementById('btnExportChecked');
-  if (btn) btn.disabled = state.previewChecked.size === 0 && state.compareChecked.size === 0;
+  // 始终启用，与兄弟按钮行为一致
 }
 
 // ── Init: restore saved mode, then load defaults ──
