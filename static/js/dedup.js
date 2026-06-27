@@ -583,9 +583,11 @@ function dedupStop() {
     dedupState.abort = true;
     dedupAbortActiveRequests();
     $("dedupBtnStop").disabled = true;
-    $("dedupBtnStop").textContent = "停止中...";
-    dedupLog("正在停止，已取消所有进行中的请求...");
-    showToast("正在停止...");
+    $("dedupBtnStop").textContent = "已停止";
+    $("dedupBtnStart").disabled = false;
+    _dedupStopRuntime();
+    dedupLog("已停止，已取消所有进行中的请求");
+    showToast("已停止");
 };
 
 
