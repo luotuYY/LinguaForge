@@ -444,11 +444,8 @@ function editTranslation(index, evt) {
   var td = evt.currentTarget;
   if (td.querySelector('textarea')) return;
   var orig = line.new_translation;
-  // 记录单元格当前高度，textarea 填满不撑大
-  var cellH = td.offsetHeight;
   td.innerHTML = '<textarea class="inline-edit" data-index="' + index + '">' + escHtml(orig) + '</textarea>';
   var ta = td.querySelector('textarea');
-  ta.style.height = cellH + 'px';
   ta.focus();
   ta.select();
   ta.addEventListener('blur', function () { commitEditTA(ta, index); });
