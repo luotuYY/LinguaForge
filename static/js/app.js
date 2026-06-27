@@ -719,10 +719,14 @@ function triggerDownload(filename, fcontent) {
   _bind('btnManualInput', 'click', loadManualInput);
   _bind('btnTranslatePreviewSel', 'click', translatePreviewSelected);
 
-  // ── 翻译页：搜索 ──
-  var ps = $('previewSearch'); if (ps) ps.addEventListener('input', onPreviewSearch);
-  _bind('previewSearch', 'input', onPreviewSearch);
-  var cs = $('compareSearch'); if (cs) cs.addEventListener('input', onCompareSearch);
+  // ── 翻译页：搜索（input + compositionend 兼容 IME） ──
+  function _bindSearchInput(id, handler) {
+    var el = $(id); if (!el) return;
+    el.addEventListener('input', handler);
+    el.addEventListener('compositionend', handler);
+  }
+  _bindSearchInput('previewSearch', onPreviewSearch);
+  _bindSearchInput('compareSearch', onCompareSearch);
 
   // ── 翻译页：导出下拉 ──
   var exportBtns = document.querySelectorAll('#exportOptions .btn');
