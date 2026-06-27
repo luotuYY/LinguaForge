@@ -437,11 +437,11 @@ function copyRow(index) {
 }
 
 // ── 行内编辑 ──
-function editTranslation(index, evt) {
+function editTranslation(index, evt, td) {
   var line = state.lines[index];
   if (!line || line.error) return;
   evt.stopPropagation();
-  var td = evt.currentTarget;
+  if (!td) td = evt.currentTarget;
   if (td.querySelector('textarea')) return;
   var orig = line.new_translation;
   td.innerHTML = '<textarea class="inline-edit" data-index="' + index + '">' + escHtml(orig) + '</textarea>';
@@ -502,9 +502,9 @@ function keepOld(index) {
 }
 
 // ── Click-to-copy Original ──
-function copyOriginal(e) {
+function copyOriginal(e, el) {
   e.stopPropagation();
-  var text = e.currentTarget.textContent;
+  var text = (el || e.currentTarget).textContent;
   if (!text) return;
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(function () {
@@ -877,8 +877,8 @@ function triggerDownload(filename, fcontent) {
       var action = target.dataset.action;
       var idx = parseInt(target.dataset.index);
       if (action === 'compare-check') onCompareCheck(target);
-      else if (action === 'copy-original') copyOriginal(e);
-      else if (action === 'edit-translation') editTranslation(idx, e);
+      else if (action === 'copy-original') copyOriginal(e, target);
+      else if (action === 'edit-translation') editTranslation(idx, e, target);
       else if (action === 'keep-old') keepOld(idx);
       else if (action === 'retry-one') retryOne(idx, e);
       else if (action === 'copy-row') copyRow(idx);
