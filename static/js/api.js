@@ -328,15 +328,6 @@ async function translateBatchItems(items) {
                 chunk[pos].degraded = !!res.degraded;
                 if (res.error) errors++;
                 done++;
-                var _orig = chunk[pos].original || '';
-                var _disp = _orig.length > 30 ? _orig.substring(0, 28) + '…' : _orig;
-                if (res.error) {
-                  log('[' + done + '] ✗ "' + _disp + '" → ' + res.error, 'err');
-                } else {
-                  var _t = (res.new_translation || '');
-                  var _tdisp = _t.length > 40 ? _t.substring(0, 38) + '…' : _t;
-                  log('[' + done + '] ✓ "' + _disp + '" → "' + _tdisp + '"', 'ok');
-                }
                 updateCompareRow(chunk[pos].index);
               }
             } catch (parseErr) {}
@@ -358,15 +349,6 @@ async function translateBatchItems(items) {
               chunk[lastPos].degraded = !!lastRes.degraded;
               if (lastRes.error) errors++;
               done++;
-              var _orig2 = chunk[lastPos].original || '';
-              var _disp2 = _orig2.length > 30 ? _orig2.substring(0, 28) + '…' : _orig2;
-              if (lastRes.error) {
-                log('[' + done + '] ✗ "' + _disp2 + '" → ' + lastRes.error, 'err');
-              } else {
-                var _t2 = (lastRes.new_translation || '');
-                var _tdisp2 = _t2.length > 40 ? _t2.substring(0, 38) + '…' : _t2;
-                log('[' + done + '] ✓ "' + _disp2 + '" → "' + _tdisp2 + '"', 'ok');
-              }
               updateCompareRow(chunk[lastPos].index);
             }
           } catch (e2) {}
