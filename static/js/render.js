@@ -187,10 +187,7 @@ function renderCompare() {
     compareHtml += '</tbody></table>';
     compareHtml += _renderPagination(total, perPage, state.comparePage, 'compare');
     $('cardCompare').innerHTML = compareHtml;
-    _bindPagination('cardCompare', 'compare', {
-      onPage: function(p) { state.comparePage = p; renderCompare(); },
-      onRowsPerPage: function(v) { state.previewRowLimit = v; state.previewPage = 1; state.comparePage = 1; renderPreview(); renderCompare(); }
-    });
+    _bindComparePagination();
   }
   if (q) $('compareSearchCount').textContent = shown + ' 条匹配';
   updateSelectAllCompare();
@@ -421,23 +418,78 @@ function _appendCompareRow(l) {
   _refreshComparePagination();
 }
 
-// ── 刷新对比表分页条（增量追加行时调用，同步总数） ──
+// ── 对比表轻量翻页（不触发 renderCompare 全量重建） ──
+function _comparePageTo(p) {
+  var container = document.getElementById('cardCompare');
+  if (!container) return;
+  var rows = container.querySelectorAll('.compare-table tbody tr[data-row-index]');
+  var perPage = state.previewRowLimit || 200;
+  var total = rows.length;
+  var totalPages = Math.max(1, Math.ceil(total / perPage));
+  if (p < 1) p = 1;
+  if (p > totalPages) p = totalPages;
+  state.comparePage = p;
+  var start = (p - 1) * perPage;
+  var end = p * perPage;
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].style.display = (i >= start && i < end) ? '' : 'none';
+  }
+  // 更新分页条
+  var pgBar = container.querySelector('.pagination-bar');
+  if (pgBar) pgBar.outerHTML = _renderPagination(total, perPage, p, 'compare');
+  _bindComparePagination();
+  container.scrollTop = 0;
+}
+
+// ── 绑定对比表分页事件（可重复调用） ──
+function _bindComparePagination() {
+  _bindPagination('cardCompare', 'compare', {
+    onPage: function(p) { _comparePageTo(p); },
+    onRowsPerPage: function(v) {
+      state.previewRowLimit = v;
+      state.previewPage = 1;
+      state.comparePage = 1;
+      renderPreview();
+      renderCompare();
+    }
+  });
+}
+
+// ── 刷新对比表分页（增量追加行时调用，自动分页 + 跳转末页） ──
 function _refreshComparePagination() {
   var container = document.getElementById('cardCompare');
   if (!container) return;
-  var pgBar = container.querySelector('.pagination-bar');
-  if (!pgBar) return;
-  var rows = state.lines.filter(function (l) { return l.new_translation || l.error; });
-  var total = rows.length;
+  var tbody = container.querySelector('.compare-table tbody');
+  if (!tbody) return;
+  var allRows = tbody.querySelectorAll('tr[data-row-index]');
+  var total = allRows.length;
   var perPage = state.previewRowLimit || 200;
-  var totalPages = Math.max(1, Math.ceil(total / perPage));
-  if (state.comparePage > totalPages) state.comparePage = totalPages;
-  if (state.comparePage < 1) state.comparePage = 1;
-  pgBar.outerHTML = _renderPagination(total, perPage, state.comparePage, 'compare');
-  _bindPagination('cardCompare', 'compare', {
-    onPage: function(p) { state.comparePage = p; renderCompare(); },
-    onRowsPerPage: function(v) { state.previewRowLimit = v; state.previewPage = 1; state.comparePage = 1; renderPreview(); renderCompare(); }
-  });
+
+  if (total <= perPage) {
+    // 未超限：显示所有行，移除分页条
+    for (var i = 0; i < allRows.length; i++) allRows[i].style.display = '';
+    var pgBar = container.querySelector('.pagination-bar');
+    if (pgBar) pgBar.remove();
+    return;
+  }
+
+  // 超过分页界限：跳转到最后一页
+  var totalPages = Math.ceil(total / perPage);
+  state.comparePage = totalPages;
+  var start = (totalPages - 1) * perPage;
+  var end = total;
+  for (var i = 0; i < allRows.length; i++) {
+    allRows[i].style.display = (i >= start && i < end) ? '' : 'none';
+  }
+
+  // 更新分页条
+  var pgBar = container.querySelector('.pagination-bar');
+  if (pgBar) {
+    pgBar.outerHTML = _renderPagination(total, perPage, state.comparePage, 'compare');
+  } else {
+    container.insertAdjacentHTML('beforeend', _renderPagination(total, perPage, state.comparePage, 'compare'));
+  }
+  _bindComparePagination();
 }
 
 // ── 增量更新单行（翻译进行中避免全量重建） ──
