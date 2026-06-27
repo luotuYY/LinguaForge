@@ -91,7 +91,6 @@ function _migrateFromLocalStorage() {
       }
     }
     tx.oncomplete = function () {
-      console.log('[db] 已从 localStorage 迁移 ' + migrated + ' 个 key');
       resolve();
     };
     tx.onerror = function (e) { reject(e.target.error); };
@@ -108,7 +107,6 @@ var dbReady = _openDB()
     return _migrateFromLocalStorage();
   })
   .then(function () {
-    console.log('[db] IndexedDB 就绪，缓存 ' + Object.keys(_cache).length + ' 个 key');
   })
   .catch(function (err) {
     console.error('[db] IndexedDB 初始化失败，回退到 localStorage:', err);

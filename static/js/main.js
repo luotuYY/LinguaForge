@@ -12,4 +12,3 @@ import * as App from "./app.js";
 import * as Tag from "./tag.js";
 import * as Dedup from "./dedup.js";
 
-console.log("LinguaForge modules loaded");
