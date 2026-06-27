@@ -117,7 +117,6 @@ var LLM_PARAM_DEFAULTS = {
   dedupTemperature:     '0.1',
   dedupTopP:            '0.6',
   dedupMaxTokens:       '10',
-  dedupRepPenalty:      '1.0',
   dedupConcurrency:     '5',
   // 分词页
   tagTemperature:       '0.1',

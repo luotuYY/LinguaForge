@@ -43,7 +43,7 @@ function loadDedupParams() {
     $("dedupTemperature").value = cfg.temperature != null ? cfg.temperature : DEDUP_DEFAULTS.temperature;
     $("dedupTopP").value = cfg.top_p != null ? cfg.top_p : DEDUP_DEFAULTS.top_p;
     $("dedupMaxTokens").value = cfg.max_tokens != null ? cfg.max_tokens : DEDUP_DEFAULTS.max_tokens;
-    $("dedupRepPenalty").value = cfg.rep_penalty != null ? cfg.rep_penalty : DEDUP_DEFAULTS.rep_penalty;
+
     $("dedupConcurrency").value = cfg.concurrency != null ? cfg.concurrency : DEDUP_DEFAULTS.concurrency;
     $("dedupStrategyText").value = cfg.strategy || DEDUP_DEFAULTS.strategy;
 }
@@ -57,7 +57,7 @@ function getDedupParams() {
       temperature: parseFloat($("dedupTemperature").value) || DEDUP_DEFAULTS.temperature,
       top_p: parseFloat($("dedupTopP").value) || DEDUP_DEFAULTS.top_p,
       max_tokens: parseInt($("dedupMaxTokens").value) || DEDUP_DEFAULTS.max_tokens,
-      rep_penalty: parseFloat($("dedupRepPenalty").value) || DEDUP_DEFAULTS.rep_penalty,
+      rep_penalty: DEDUP_DEFAULTS.rep_penalty,
       concurrency: parseInt($("dedupConcurrency").value) || DEDUP_DEFAULTS.concurrency,
       strategy: $("dedupStrategyText").value.trim() || DEDUP_DEFAULTS.strategy,
     };
@@ -888,7 +888,7 @@ async function init() {
     _bindChange("dedupTemperature", saveDedupParams);
     _bindChange("dedupTopP", saveDedupParams);
     _bindChange("dedupMaxTokens", saveDedupParams);
-    _bindChange("dedupRepPenalty", saveDedupParams);
+
     _bindChange("dedupConcurrency", saveDedupParams);
 
     // 双击 label 恢复默认值
