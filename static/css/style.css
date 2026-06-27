@@ -1513,7 +1513,9 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
 }
 .dedup-upload-card .drop-zone input[type=file] {
   position: absolute;
-  inset: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
   opacity: 0;
   cursor: pointer;
   display: block !important;
