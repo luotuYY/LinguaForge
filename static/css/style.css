@@ -518,10 +518,15 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   flex-wrap: wrap;
   font-size: 0.73rem;
   color: var(--text-secondary);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
-.param-row label { white-space: nowrap; cursor: pointer; }
+.param-row::-webkit-scrollbar { display: none; }
+.param-row label { white-space: nowrap; cursor: pointer; flex-shrink: 0; }
 .param-input {
   width: 56px;
+  flex-shrink: 0;
   padding: 4px 6px;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 4px;
@@ -746,8 +751,8 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   .main-grid { grid-template-columns: 1fr !important; grid-template-rows: auto !important; gap: 10px; padding: 10px; }
   #resize-hit { display: none !important; }
   .card { max-height: 50vh; }
-  .param-row { gap: 6px; }
-  .param-input { width: 48px; }
+  .param-row { gap: 6px; overflow-x: auto; }
+  .param-input { width: 48px; flex-shrink: 0; }
   .log-area { max-height: 80px; }
   #dedupLogArea.log-area { max-height: 140px; }
   .search-input { width: 90px; }
