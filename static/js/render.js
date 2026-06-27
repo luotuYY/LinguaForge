@@ -163,10 +163,24 @@ function renderCompare() {
       '<th class="col-orig">原文</th>' +
       '<th class="col-old">旧译文</th>' +
       '<th class="col-new">新译文 <button class="btn btn-sm" data-action="clear-new-without-old" title="清空所有无旧译文词条的新译文" style="font-size:0.68rem;padding:1px 6px">清</button></th>' +
+      '<th class="col-tag">分类</th>' +
       '<th class="col-actions"></th>' +
     '</tr></thead><tbody>';
     pageRows.forEach(function (l) {
       var rowCls = (l.error ? 'row-error' : '') + (l.keepOld ? ' row-keep' : '');
+      var tagBadge = '';
+      if (l.tag_l1) {
+        var tagSchema = null;
+        try { tagSchema = window._compareTagSchema || null; } catch(e) {}
+        var tagColor = '#888';
+        if (tagSchema && tagSchema[l.tag_l1] && tagSchema[l.tag_l1].color) tagColor = tagSchema[l.tag_l1].color;
+        tagBadge = '<span class="tag-badge" style="background:' + tagColor + ';font-size:0.65rem;padding:1px 6px;border-radius:4px;color:#fff">' +
+          escHtml(l.tag_l1) + (l.tag_l2 ? ' / ' + escHtml(l.tag_l2) : '') +
+          (l.confidence > 0 ? ' <span style="opacity:0.8">' + Math.round(l.confidence*100) + '%</span>' : '') +
+          '</span>';
+      } else if (l._tagging) {
+        tagBadge = '<span style="color:var(--text-muted);font-size:0.72rem">分词中...</span>';
+      }
       compareHtml += '<tr class="' + rowCls + '" data-row-index="' + l.index + '">' +
         '<td class="col-check"><input type="checkbox" class="row-check" data-index="' + l.index + '" data-action="compare-check" ' + (state.compareChecked.has(l.index) ? 'checked' : '') + '></td>' +
         '<td class="cell-copyable" data-action="copy-original" title="点击复制">' + hl(l.original) + '</td>' +
@@ -177,6 +191,7 @@ function renderCompare() {
           (l.warning && !l.truncated ? ' <span title="' + escHtml(l.warning) + '" style="cursor:help;color:var(--yellow)">\u26A0\uFE0F</span>' : '') +
           (l.degraded ? ' <span title="无旧译文，已降级为直译" style="cursor:help;color:var(--text-muted)">↓</span>' : '') +
         '</td>' +
+        '<td class="col-tag">' + tagBadge + '</td>' +
         '<td class="col-actions">' +
           '<button class="btn btn-sm" data-action="keep-old" data-index="' + l.index + '" ' + (l.keepOld || !l.translation ? 'disabled' : '') + ' title="' + (!l.translation ? '无原译文可保留' : l.keepOld ? '已标记保留' : '用旧译文替换新译文') + '">' + (l.keepOld ? '已保留' : '保留译文') + '</button>' +
           '<button class="btn btn-sm" data-action="retry-one" data-index="' + l.index + '">重译</button>' +
@@ -386,6 +401,7 @@ function _appendCompareRow(l) {
       '<th class="col-orig">原文</th>' +
       '<th class="col-old">旧译文</th>' +
       '<th class="col-new">新译文 <button class="btn btn-sm" data-action="clear-new-without-old" title="清空所有无旧译文词条的新译文" style="font-size:0.68rem;padding:1px 6px">清</button></th>' +
+      '<th class="col-tag">分类</th>' +
       '<th class="col-actions"></th>' +
     '</tr></thead><tbody></tbody></table>';
     tbody = document.querySelector('.compare-table tbody');
@@ -407,11 +423,21 @@ function _appendCompareRow(l) {
   var tr = document.createElement('tr');
   tr.className = rowCls;
   tr.setAttribute('data-row-index', l.index);
+  var tagCell = '';
+  if (l.tag_l1) {
+    var _ts = null; try { _ts = window._compareTagSchema || null; } catch(e) {}
+    var _tc = '#888'; if (_ts && _ts[l.tag_l1] && _ts[l.tag_l1].color) _tc = _ts[l.tag_l1].color;
+    tagCell = '<span class="tag-badge" style="background:' + _tc + ';font-size:0.65rem;padding:1px 6px;border-radius:4px;color:#fff">' +
+      escHtml(l.tag_l1) + (l.tag_l2 ? ' / ' + escHtml(l.tag_l2) : '') + '</span>';
+  } else if (l._tagging) {
+    tagCell = '<span style="color:var(--text-muted);font-size:0.72rem">分词中...</span>';
+  }
   tr.innerHTML =
     '<td class="col-check"><input type="checkbox" class="row-check" data-index="' + l.index + '" data-action="compare-check"></td>' +
     '<td class="cell-copyable" data-action="copy-original" title="点击复制">' + hl(l.original) + '</td>' +
     '<td>' + (l.translation ? hl(l.translation) : '\u2014') + '</td>' +
     '<td class="cell-editable col-new" data-action="edit-translation" data-index="' + l.index + '" title="' + (l.warning || '点击编辑') + '">' + newContent + '</td>' +
+    '<td class="col-tag">' + tagCell + '</td>' +
     '<td class="col-actions">' +
       '<button class="btn btn-sm" data-action="keep-old" data-index="' + l.index + '" ' + (l.keepOld || !l.translation ? 'disabled' : '') + ' title="' + (!l.translation ? '无原译文可保留' : l.keepOld ? '已标记保留' : '用旧译文替换新译文') + '">' + (l.keepOld ? '已保留' : '保留译文') + '</button>' +
       '<button class="btn btn-sm" data-action="retry-one" data-index="' + l.index + '">重译</button>' +
