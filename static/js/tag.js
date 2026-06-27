@@ -1136,7 +1136,7 @@ async function tagStart() {
       }
 
       var chunk = chunks[chunkIdx];
-      tagLog('── 块 ' + (chunkIdx + 1) + '/' + totalChunks + ' ── 分词 ' + chunk.length + ' 条（累计 ' + Math.min((chunkIdx + 1) * chunk.length, total) + '/' + total) + '）');
+      tagLog('── 块 ' + (chunkIdx + 1) + '/' + totalChunks + ' ── 分词 ' + chunk.length + ' 条（累计 ' + Math.min((chunkIdx + 1) * chunk.length, total) + '/' + total + '）');
 
       var tagLLM = {};
       var _tEl = document.getElementById('tagTemperature');
