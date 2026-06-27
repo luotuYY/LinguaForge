@@ -1086,7 +1086,18 @@ function tagEditPick(l1,l2) {
   for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===t){sel.selectedIndex=i;break;}}
 }
 
-// ── 批量分词(分块发送,每块条数 = 并发数,块间可停止) ──
+// ── 活跃分词请求控制器集（供 tagStop 即时取消所有进行中的请求） ──
+var _tagActiveControllers = null;
+
+function tagAbortActiveRequests() {
+  if (_tagActiveControllers) {
+    _tagActiveControllers.forEach(function (ctrl) { ctrl.abort(); });
+    _tagActiveControllers.clear();
+    _tagActiveControllers = null;
+  }
+}
+
+// ── 批量分词（滑动窗口并发池：每个条目独立请求，即时可停止） ──
 async function tagStart() {
   if (tagState.translating || tagState.lines.length===0) return;
 
@@ -1105,18 +1116,11 @@ async function tagStart() {
 
   var concurrency = parseInt(document.getElementById('tagConcurrency').value) || 5;
 
-  // 按并发数分块
-  var chunks = [];
-  for (var ci = 0; ci < pending.length; ci += concurrency) {
-    chunks.push(pending.slice(ci, ci + concurrency));
-  }
-  var totalChunks = chunks.length;
-
   tagState.translating = true; tagState.abort = false; tagState.tagStarted = true;
   document.getElementById('tagBtnStart').disabled = true;
   document.getElementById('tagBtnStop').disabled = false;
   _tagStartRuntime(); tagLogClear();
-  tagLog('开始分词,共 ' + pending.length + ' 行,并发 ' + concurrency + ',分 ' + totalChunks + ' 块');
+  tagLog('开始分词,共 ' + pending.length + ' 行,并发 ' + concurrency + '（即时可停止）');
 
   var apiConfig = tagGetApiConfig();
   var systemPrompt = document.getElementById('tagStrategyText');
@@ -1127,133 +1131,107 @@ async function tagStart() {
   var fullPrompt = strategyText + '\n\n可用类别(一级 / 二级):\n' + catDesc + '\n请严格输出以下JSON格式:{"l1":"一级类目","l2":"二级类目","confidence":0.0~1.0}\n只输出JSON,不要其他内容。';
 
   var total = pending.length, done = 0, errors = 0;
-  try {
-    for (var chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
-      // 块间检查停止信号
-      if (tagState.abort) {
-        tagLog('用户停止,已完成 ' + done + '/' + total + ' 行(' + chunkIdx + '/' + totalChunks + ' 块)');
-        break;
+  var activeControllers = new Set();
+  _tagActiveControllers = activeControllers;
+  var queue = pending.slice();
+
+  // tagLLM 参数提取（从 DOM 中获取，每次请求复用）
+  var tagLLM = {};
+  var _tEl = document.getElementById('tagTemperature');
+  var _pEl = document.getElementById('tagTopP');
+  var _mEl = document.getElementById('tagMaxTokens');
+  if (_tEl) tagLLM.temperature = parseFloat(_tEl.value) || 0.1;
+  if (_pEl) tagLLM.top_p = parseFloat(_pEl.value) || 0.6;
+  if (_mEl) tagLLM.max_tokens = parseInt(_mEl.value) || 512;
+
+  document.getElementById('tagProgressFill').style.width = '0%';
+  document.getElementById('tagProgressText').textContent = '进度: 0/' + total + ' · 并发' + concurrency;
+
+  await new Promise(function (resolve) {
+    function launchNext() {
+      if (tagState.abort || queue.length === 0) {
+        if (activeControllers.size === 0) resolve();
+        return;
       }
 
-      var chunk = chunks[chunkIdx];
+      var item = queue.shift();
+      var controller = new AbortController();
+      activeControllers.add(controller);
 
-      var tagLLM = {};
-      var _tEl = document.getElementById('tagTemperature');
-      var _pEl = document.getElementById('tagTopP');
-      var _mEl = document.getElementById('tagMaxTokens');
-      if (_tEl) tagLLM.temperature = parseFloat(_tEl.value) || 0.1;
-      if (_pEl) tagLLM.top_p = parseFloat(_pEl.value) || 0.6;
-      if (_mEl) tagLLM.max_tokens = parseInt(_mEl.value) || 512;
-      var batchBody = Object.assign({
-        items: chunk.map(function(l) { return { original: l.original }; }),
-        concurrency: concurrency,
-        system_prompt: fullPrompt,
-      }, tagLLM, apiConfig);
-      var r = await fetch('/api/tag-batch', {
+      var bodyObj = Object.assign({ text: item.original, system_prompt: fullPrompt }, tagLLM, apiConfig);
+
+      fetch('/api/tag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(batchBody)
-      });
-
-      if (!r.ok) {
-        var errText = '';
-        try { var ed = await r.json(); errText = ed.error || ''; } catch (ex) { errText = r.statusText; }
-        errors += chunk.length;
-        done += chunk.length;
-        tagLog('块 ' + (chunkIdx + 1) + ' 失败: ' + (errText || '请求错误'), 'err');
-      } else {
-        var reader = r.body.getReader();
-        var decoder = new TextDecoder();
-        var buf = '';
-        while (true) {
-          var streamResult = await reader.read();
-          if (streamResult.done) break;
-          buf += decoder.decode(streamResult.value, { stream: true });
-          var lines = buf.split('\n');
-          buf = lines.pop();
-          for (var li = 0; li < lines.length; li++) {
-            var line = lines[li].trim();
-            if (!line) continue;
-            try {
-              var res = JSON.parse(line);
-              var pos = res.index;
-              if (pos >= 0 && pos < chunk.length) {
-                var item = chunk[pos];
-                if (res.error) {
-                  errors++;
-                } else if (!item._manualEdit) {
-                  // Normalize tag_l1: match against schema (case-insensitive, trim)
-                  var l1 = (res.tag_l1 || '').trim();
-                  var l2 = (res.tag_l2 || '').trim();
-                  if (l1) {
-                    var schemaKeys = Object.keys(getEnabledSchema());
-                    var matchL1 = schemaKeys.find(function(k) { return k.toLowerCase() === l1.toLowerCase(); });
-                    if (matchL1) {
-                      l1 = matchL1;
-                    } else {
-                      // 回退：LLM 可能把二级类目名错放在 l1，尝试从 schema 子类反查一级
-                      var foundParent = null;
-                      schemaKeys.forEach(function(k) {
-                        if (getEnabledSchema()[k].subs.indexOf(l1) >= 0) foundParent = k;
-                      });
-                      if (foundParent) {
-                        // l1 实际是二级类目名，纠正：移为 l2，补上正确的一级
-                        if (!l2) l2 = l1;
-                        l1 = foundParent;
-                      } else {
-                        // Fuzzy: check if l1 contains or is contained by a schema key
-                        var fuzzy = schemaKeys.find(function(k) { return k.toLowerCase().indexOf(l1.toLowerCase()) >= 0 || l1.toLowerCase().indexOf(k.toLowerCase()) >= 0; });
-                        l1 = fuzzy || '';
-                      }
-                    }
-                  }
-                  item.tag_l1 = l1;
-                  item.tag_l2 = l2;
-                  item.confidence = res.confidence || 0;
-                  tagUpdateOneCard(item);
-                }
-                done++;
+        body: JSON.stringify(bodyObj),
+        signal: controller.signal,
+      })
+        .then(async function (res) {
+          activeControllers.delete(controller);
+          if (res.ok) {
+            var d = await res.json();
+            if (d.translation && !item._manualEdit) {
+              var raw = d.translation.trim();
+              var parsed = null;
+              try {
+                var clean = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+                parsed = JSON.parse(clean);
+              } catch (ex) {}
+              var l1 = '', l2 = '', conf = 0;
+              if (parsed && parsed.l1) {
+                l1 = parsed.l1.trim();
+                l2 = (parsed.l2 || '').trim();
+                conf = typeof parsed.confidence === 'number' ? parsed.confidence : 0;
+              } else {
+                l1 = raw;
               }
-            } catch (parseErr) {}
-          }
-          document.getElementById('tagProgressFill').style.width = (done/total*100)+'%';
-          document.getElementById('tagProgressText').textContent = '进度: '+done+'/'+total+' · 成功'+(done-errors)+' · 失败'+errors+' · 块'+(chunkIdx+1)+'/'+totalChunks;
-        }
-        // 处理 buffer 残留
-        if (buf.trim()) {
-          try {
-            var lastRes = JSON.parse(buf.trim());
-            var lastPos = lastRes.index;
-            if (lastPos >= 0 && lastPos < chunk.length) {
-              var lastItem = chunk[lastPos];
-              if (lastRes.error) { errors++; }
-              else if (!lastItem._manualEdit) {
-                var l1r = (lastRes.tag_l1 || '').trim();
-                var l2r = (lastRes.tag_l2 || '').trim();
-                if (l1r) {
-                  var sk = Object.keys(getEnabledSchema());
-                  var ml1 = sk.find(function(k) { return k.toLowerCase() === l1r.toLowerCase(); });
-                  if (ml1) l1r = ml1;
+              if (l1) {
+                var sk = Object.keys(getEnabledSchema());
+                var ml1 = sk.find(function(k) { return k.toLowerCase() === l1.toLowerCase(); });
+                if (ml1) l1 = ml1;
+                else {
+                  var fp = null;
+                  sk.forEach(function(k) { if (getEnabledSchema()[k].subs.indexOf(l1) >= 0) fp = k; });
+                  if (fp) { if (!l2) l2 = l1; l1 = fp; }
+                  else { var fz = sk.find(function(k) { return k.toLowerCase().indexOf(l1.toLowerCase())>=0||l1.toLowerCase().indexOf(k.toLowerCase())>=0;}); l1 = fz || ''; }
                 }
-                lastItem.tag_l1 = l1r;
-                lastItem.tag_l2 = l2r;
-                lastItem.confidence = lastRes.confidence || 0;
-                tagUpdateOneCard(lastItem);
+                item.tag_l1 = l1;
+                item.tag_l2 = l2;
+                item.confidence = conf;
+                tagUpdateOneCard(item);
               }
-              done++;
+            } else if (d.error) {
+              errors++;
             }
-          } catch (e2) {}
-        }
-      }
-
-      // 更新进度
-      document.getElementById('tagProgressFill').style.width = (done/total*100)+'%';
-      document.getElementById('tagProgressText').textContent = '进度: '+done+'/'+total+' · 成功'+(done-errors)+' · 失败'+errors+' · 块'+(chunkIdx+1)+'/'+totalChunks;
+            done++;
+          } else {
+            errors++;
+            done++;
+          }
+          var sc = done - errors;
+          document.getElementById('tagProgressFill').style.width = (done/total*100)+'%';
+          document.getElementById('tagProgressText').textContent = '进度: '+done+'/'+total+' · 成功'+sc+' · 失败'+errors;
+          launchNext();
+        })
+        .catch(function (err) {
+          activeControllers.delete(controller);
+          if (err.name !== 'AbortError') {
+            errors++;
+          }
+          done++;
+          var sc = done - errors;
+          document.getElementById('tagProgressFill').style.width = (done/total*100)+'%';
+          document.getElementById('tagProgressText').textContent = '进度: '+done+'/'+total+' · 成功'+sc+' · 失败'+errors;
+          launchNext();
+        });
     }
-  } catch (e) {
-    tagLog('异常: ' + e.message, 'err');
-  }
 
+    for (var i = 0; i < Math.min(concurrency, total); i++) {
+      launchNext();
+    }
+  });
+
+  _tagActiveControllers = null;
   tagState.translating=false; tagState.abort=false; _tagStopRuntime();
   // 全部完成时清除 started 标志
   var stillPending = tagState.lines.filter(function(l) { return !l.tag_l1; }).length;
@@ -1267,7 +1245,7 @@ async function tagStart() {
   tagBtnState();
 }
 
-function tagStop() { tagState.abort=true; document.getElementById('tagBtnStop').disabled=true; showToast('正在停止,当前块完成后不再发起新请求'); }
+function tagStop() { tagState.abort = true; tagAbortActiveRequests(); document.getElementById('tagBtnStop').disabled = true; showToast('正在停止...'); }
 
 function tagUpdateTagStartButton() {
   var btn = document.getElementById('tagBtnStart');

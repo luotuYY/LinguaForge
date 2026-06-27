@@ -406,109 +406,16 @@ async function handleFiles(fileList) {
 }
 
 // ── 批量评估（分块发送，每块完后检查 abort） ──
-function _chunkArray(arr, size) {
-    var chunks = [];
-    for (var i = 0; i < arr.length; i += size) {
-      chunks.push(arr.slice(i, i + size));
-    }
-    return chunks;
-}
 
-async function _evaluateOneChunk(groupsChunk, chunkIdx) {
-    var params = getDedupParams();
-    var apiConfig = getDedupApiConfig();
+// ── 活跃去重评估请求控制器集（供 dedupStop 即时取消所有进行中的请求） ──
+var _dedupActiveControllers = null;
 
-    return fetch("/api/dedup/evaluate-batch", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        groups: groupsChunk,
-        concurrency: Math.min(params.concurrency, groupsChunk.length),
-        temperature: params.temperature,
-        top_p: params.top_p,
-        max_tokens: params.max_tokens,
-        repetition_penalty: params.rep_penalty,
-        system_prompt: params.strategy,
-        ...apiConfig,
-      }),
-    });
-}
-
-async function _streamOneChunk(groupsChunk, chunkIdx, chunkKeys, total, completed, errors, offset) {
-    var r = await _evaluateOneChunk(groupsChunk, chunkIdx);
-    if (!r.ok) {
-      var errData = await r.json().catch(function () { return { error: "HTTP " + r.status }; });
-      throw new Error(errData.error || "HTTP " + r.status);
-    }
-
-    var reader = r.body.getReader();
-    var decoder = new TextDecoder();
-    var buffer = "";
-
-    while (true) {
-      if (dedupState.abort) break;
-      var result = await reader.read();
-      if (result.done) break;
-      buffer += decoder.decode(result.value, { stream: true });
-
-      var lines = buffer.split("\n");
-      buffer = lines.pop();
-
-      for (var li = 0; li < lines.length; li++) {
-        var line = lines[li].trim();
-        if (!line) continue;
-        if (dedupState.abort) break;
-        try {
-          var data = JSON.parse(line);
-          completed.val++;
-
-          if (data.best_index !== undefined && data.best_index !== null) {
-            var key = chunkKeys[data.group_index];
-            if (key) {
-              var group = dedupState.groups[key];
-              group.forEach(function (e, idx) {
-                dedupState.selected.set(_entryId(e), idx === data.best_index);
-              });
-              dedupState.bestIndices.set(key, data.best_index);
-              var visibleIdx = dedupState.visibleKeys.indexOf(key);
-              _updateGroupDOM(key, visibleIdx);
-            }
-          } else if (data.error) {
-            errors.val++;
-          }
-
-          var fill = $("dedupProgressFill");
-          var text = $("dedupProgressText");
-          fill.style.width = (completed.val / total * 100) + "%";
-          text.textContent = "评估进度: " + completed.val + "/" + total;
-        } catch (e) {}
-      }
-    }
-    // 处理 buffer 残留的最后一行
-    if (buffer.trim()) {
-      try {
-        var data = JSON.parse(buffer.trim());
-        completed.val++;
-        if (data.best_index !== undefined && data.best_index !== null) {
-          var key = chunkKeys[data.group_index];
-          if (key) {
-            var group = dedupState.groups[key];
-            group.forEach(function (e, idx) {
-              dedupState.selected.set(_entryId(e), idx === data.best_index);
-            });
-            dedupState.bestIndices.set(key, data.best_index);
-            var visibleIdx = dedupState.visibleKeys.indexOf(key);
-            _updateGroupDOM(key, visibleIdx);
-          }
-        } else if (data.error) {
-          errors.val++;
-        }
-        var fill = $("dedupProgressFill");
-        var text2 = $("dedupProgressText");
-        fill.style.width = (completed.val / total * 100) + "%";
-        text2.textContent = "评估进度: " + completed.val + "/" + total;
-      } catch (e) {}
-    }
+function dedupAbortActiveRequests() {
+  if (_dedupActiveControllers) {
+    _dedupActiveControllers.forEach(function (ctrl) { ctrl.abort(); });
+    _dedupActiveControllers.clear();
+    _dedupActiveControllers = null;
+  }
 }
 
 async function dedupStart() {
@@ -561,9 +468,8 @@ async function dedupStart() {
     }
 
     var concurrency = Math.min(getDedupParams().concurrency, allGroups.length);
-    var chunks = _chunkArray(allGroups, concurrency);
 
-    dedupLog("开始评估，共 " + allGroups.length + " 组（跳过了 " + skippedCount + " 组完全相同的），分 " + chunks.length + " 块，每块 " + concurrency + " 组");
+    dedupLog("开始评估，共 " + allGroups.length + " 组（跳过了 " + skippedCount + " 组完全相同的），并发 " + concurrency + "（即时可停止）");
 
     var fill = $("dedupProgressFill");
     var text = $("dedupProgressText");
@@ -572,44 +478,108 @@ async function dedupStart() {
 
     var completed = { val: 0 };
     var errors = { val: 0 };
-    var chunkOffset = 0;
+    var activeControllers = new Set();
+    _dedupActiveControllers = activeControllers;
+    var queue = allGroups.slice();
 
-    try {
-      for (var ci = 0; ci < chunks.length; ci++) {
-        if (dedupState.abort) break;
-        var chunk = chunks[ci];
-        var chunkItems = chunk.map(function (g) { return g.items; });
-        var chunkKeys = chunk.map(function (g) { return g.key; });
-        await _streamOneChunk(chunkItems, ci, chunkKeys, allGroups.length, completed, errors, chunkOffset);
-        chunkOffset += chunk.length;
+    await new Promise(function (resolve) {
+      function launchNext() {
+        if (dedupState.abort || queue.length === 0) {
+          if (activeControllers.size === 0) resolve();
+          return;
+        }
+
+        var group = queue.shift();
+        var controller = new AbortController();
+        activeControllers.add(controller);
+
+        var params = getDedupParams();
+        var apiConfig = getDedupApiConfig();
+
+        fetch("/api/dedup/evaluate-batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            groups: [group.items],
+            concurrency: 1,
+            temperature: params.temperature,
+            top_p: params.top_p,
+            max_tokens: params.max_tokens,
+            repetition_penalty: params.rep_penalty,
+            system_prompt: params.strategy,
+            ...apiConfig,
+          }),
+          signal: controller.signal,
+        })
+          .then(async function (res) {
+            activeControllers.delete(controller);
+            if (res.ok) {
+              var text = await res.text();
+              try {
+                var data = JSON.parse(text.trim());
+                completed.val++;
+                if (data.best_index !== undefined && data.best_index !== null) {
+                  var key = group.key;
+                  var grp = dedupState.groups[key];
+                  grp.forEach(function (e, idx) {
+                    dedupState.selected.set(_entryId(e), idx === data.best_index);
+                  });
+                  dedupState.bestIndices.set(key, data.best_index);
+                  var visibleIdx = dedupState.visibleKeys.indexOf(key);
+                  _updateGroupDOM(key, visibleIdx);
+                } else if (data.error) {
+                  errors.val++;
+                }
+              } catch (e) {
+                errors.val++;
+              }
+            } else {
+              errors.val++;
+              completed.val++;
+            }
+
+            fill.style.width = (completed.val / allGroups.length * 100) + "%";
+            text.textContent = "评估进度: " + completed.val + "/" + allGroups.length;
+            launchNext();
+          })
+          .catch(function (err) {
+            activeControllers.delete(controller);
+            if (err.name !== "AbortError") {
+              errors.val++;
+              completed.val++;
+            }
+            fill.style.width = (completed.val / allGroups.length * 100) + "%";
+            text.textContent = "评估进度: " + completed.val + "/" + allGroups.length;
+            launchNext();
+          });
       }
 
-      if (dedupState.abort) {
-        dedupLog("评估已停止，完成 " + completed.val + "/" + allGroups.length + " 组");
-      } else {
-        dedupLog("评估完成: " + completed.val + " 组, 失败 " + errors.val + " 组");
-        showToast("评估完成");
+      for (var i = 0; i < Math.min(concurrency, allGroups.length); i++) {
+        launchNext();
       }
-      updateSelectedCount();
-    } catch (e) {
-      dedupLog("评估异常: " + e.message);
-      showToast("评估失败: " + e.message);
-    } finally {
-      dedupState.evaluating = false;
-      dedupState.abort = false;
-      $("dedupBtnStart").disabled = false;
-      $("dedupBtnStop").disabled = true;
+    });
+
+    _dedupActiveControllers = null;
+    if (dedupState.abort) {
+      dedupLog("评估已停止，完成 " + completed.val + "/" + allGroups.length + " 组");
+    } else {
+      dedupLog("评估完成: " + completed.val + " 组, 失败 " + errors.val + " 组");
+      showToast("评估完成");
     }
+    updateSelectedCount();
+    dedupState.evaluating = false;
+    dedupState.abort = false;
+    $("dedupBtnStart").disabled = false;
+    $("dedupBtnStop").disabled = true;
 };
 
 function dedupStop() {
     dedupState.abort = true;
+    dedupAbortActiveRequests();
     $("dedupBtnStop").disabled = true;
     $("dedupBtnStop").textContent = "停止中...";
-    dedupLog("正在停止...");
-    setTimeout(function () {
-      if ($("dedupBtnStop")) $("dedupBtnStop").textContent = "停止";
-    }, 1000);
+    dedupLog("正在停止，已取消所有进行中的请求...");
+    showToast("正在停止...");
 };
 
 
