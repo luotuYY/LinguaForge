@@ -688,9 +688,10 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   overflow-y: auto;
   transition: none;
 }
-/* 对比表编辑框：不撑大行高 */
+/* 对比表编辑框：不撑大行高，与文本位置对齐 */
 .compare-table .inline-edit {
-  display: block;
+  display: inline-block;
+  vertical-align: middle;
   width: 100%;
   max-height: 120px;
   margin: 0;
@@ -698,6 +699,7 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   border: 2px solid var(--accent);
   background: rgba(0, 0, 0, 0.85);
   padding: 5px 8px;
+  box-sizing: border-box;
 }
 .cell-editable { cursor: pointer; transition: background 0.15s; }
 .cell-editable:hover { background: rgba(124,140,248,0.08); }
