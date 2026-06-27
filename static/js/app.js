@@ -11,10 +11,11 @@ import { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS,
           updateTranslateAllButton, updateRetryButton, updateExportCheckedButton,
           getLLMParams, getApiConfig, checkLLM } from './state.js';
 import { processFiles, deleteFile, toggleFile, deletePreviewLine,
-          onFileDragStart, onFileDragOver, onFileDrop, onFileDragEnd,
-          translateOneCore, translateBatchItems,
-          enterTranslatingState, exitTranslatingState,
-          renderFileList, loadManualInput, resetSourceInput, deleteCheckedPreview } from './api.js';
+         onFileDragStart, onFileDragOver, onFileDrop, onFileDragEnd,
+         translateOneCore, translateBatchItems,
+         enterTranslatingState, exitTranslatingState,
+         abortActiveRequests,
+         renderFileList, loadManualInput, resetSourceInput, deleteCheckedPreview } from './api.js';
 import { renderInternal, getCheckedFileNames, renderPreview, renderCompare, updateSearchUI,
           updateCompareRow, updatePreviewLine, updatePreviewSelectAllVisibility,
           getCheckedPreviewIndices, getCheckedRows, onPreviewCheck, onCompareCheck,
@@ -328,9 +329,10 @@ function clearAllTranslations() {
 
 function stopTranslate() {
   state.abort = true;
+  abortActiveRequests();
   $('btnStop').disabled = true;
   $('btnStop').textContent = '停止中...';
-  showToast('正在停止，当前块完成后不再发起新请求');
+  showToast('正在停止...');
 }
 
 
