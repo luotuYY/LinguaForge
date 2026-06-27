@@ -8,6 +8,7 @@
 |---|---|
 | **翻译** | 直译 / 润色双模式，支持单行、全量、勾选批量翻译，并发可调 1–10 |
 | **分词** | LLM 自动分类（硬术语 / 硬生动），拖拽调整分类，按类目导出 |
+| **去重** | 重复原文检测，LLM 评估最佳译文，导出 zip 含备份 |
 | **本地/商业双模** | 工具栏一键切换，默认本地 LLM |
 | **文件管理** | 拖拽上传、多文件管理、勾选显示/隐藏、拖拽排序 |
 | **导出** | 单文件 / 分别导出（每个来源文件独立下载）/ 合并导出（统一文件含分隔头），勾选优先 |
@@ -19,20 +20,23 @@ LinguaForge/
 ├── app.py                  # Flask 后端（API 路由 + LLM 调用）
 ├── requirements.txt        # Python 依赖：flask + requests
 ├── start.bat               # Windows 一键启动
+├── .agents/
+│   └── AGENTS.md           # 项目开发规范
 ├── static/
-│   ├── index.html          # 翻译页 + 分词页（SPA 单页应用）
+│   ├── index.html          # 翻译页 + 分词页 + 去重页（SPA 单页应用）
 │   ├── uta.jpg             # 背景图片
 │   ├── css/
-│   │   └── style.css       # 全局样式（含分词页）
+│   │   └── style.css       # 全局样式（含分词页、去重页）
 │   └── js/
+│       ├── main.js         # 入口点，按依赖顺序加载模块
 │       ├── db.js           # IndexedDB 持久化层（内存缓存 + 自动迁移 localStorage）
-│       ├── utils.js        # 工具函数（DOM、高亮、toast）
-│       ├── state.js        # 状态管理 + 提示词模板 + LLM 配置
-│       ├── api.js          # API 调用 + 文件管理 + 批量翻译
-│       ├── render.js       # DOM 渲染（预览 + 对比表）
-│       ├── app.js          # 事件处理 + 网格拖拽 + 导出
+│       ├── utils.js        # 工具函数（DOM、高亮、toast、日志）
+│       ├── state.js        # 状态管理 + 提示词模板 + LLM 配置 + 渲染回调
+│       ├── api.js          # API 调用 + 文件管理 + 批量翻译（NDJSON 流式）
+│       ├── render.js       # DOM 渲染（预览 + 对比表 + 分页器）
+│       ├── app.js          # 事件编排 + SPA 路由 + 导出 + 网格拖拽
 │       ├── tag.js          # 分词页完整逻辑（独立模块）
-│       ├── dedup.js        # 去重页完整逻辑
+│       ├── dedup.js        # 去重页完整逻辑（独立模块）
 │       └── particles.js    # 粒子特效
 └── README.md
 ```
@@ -63,7 +67,7 @@ LinguaForge/
        └─────────────┘
 ```
 
-**SPA 单页架构**：翻译页和分词页在同一个 `index.html` 中通过 hash 路由切换（`#translate` / `#tag`），共享顶部工具栏和 API 配置。分词页 `tag.js` 由 `switchPage` 懒加载。
+**SPA 单页架构**：翻译页、分词页、去重页在同一个 `index.html` 中通过 hash 路由切换（`#translate` / `#tag` / `#dedup`），共享顶部工具栏和 API 配置。分词页 `tag.js` 和去重页 `dedup.js` 由 `switchPage` 懒加载。
 
 ## 翻译功能
 
@@ -128,6 +132,17 @@ LinguaForge/
 
 分词页批量处理时，每收到一个 LLM 分类结果都会实时更新列头计数和卡片位置。针对 5000+ 行的大文件，计数系统已从逐行扫描（O(n)×并发数）优化为增量缓存（O(1)），避免流式循环中的重复计算。进度条在批量分词期间保持流畅更新。
 
+## 去重功能
+
+| 功能 | 说明 |
+|---|---|
+| 文件/文件夹上传 | 拖拽或点击上传 txt 文件，支持整个文件夹递归子目录 |
+| 重复组检测 | 按原文自动分组，译文完全相同的组自动勾选第一条 |
+| LLM 评估 | 对译文不同的组调用 LLM 选择最佳译文，NDJSON 流式返回 |
+| 筛选模式 | 仅显示译文不同的组（需评估） |
+| 应用去重 | 导出 zip 包，含去重后的 txt 文件 + .bak 备份 |
+| 参数配置 | Temperature / Top P / Max Tokens，低值推荐 |
+
 ## 快速开始
 
 ```bash
@@ -169,7 +184,7 @@ Windows 用户双击 `start.bat` 一键启动。
 
 | 端点 | 方法 | 说明 |
 |---|---|---|
-| `/` | GET | 页面（翻译页 + 分词页 SPA） |
+| `/` | GET | 页面（翻译页 + 分词页 + 去重页 SPA） |
 | `/api/upload` | POST | 上传 txt 文件（限 50MB） |
 | `/api/manual-input` | POST | 手动输入解析 |
 | `/api/translate` | POST | 直译单条 |
@@ -180,6 +195,9 @@ Windows 用户双击 `start.bat` 一键启动。
 | `/api/tag-batch` | POST | 批量分词（NDJSON 流式） |
 | `/api/check-llm` | GET/POST | 检测 LLM 连通性 |
 | `/api/config` | GET | 返回当前配置和预设 |
+| `/api/dedup/upload` | POST | 去重：上传 txt 文件/文件夹，解析重复组 |
+| `/api/dedup/evaluate-batch` | POST | 去重：批量 LLM 评估（NDJSON 流式） |
+| `/api/dedup/apply` | POST | 去重：应用去重结果，返回 zip 包 |
 
 ## 文件格式
 
@@ -199,7 +217,8 @@ OFF=关闭
 ## 技术栈
 
 - **前端**：原生 JavaScript，零构建工具，零依赖
-- **后端**：Flask，ThreadPoolExecutor 并发，requests.Session 连接复用
+- **后端**：Flask，ThreadPoolExecutor 并发，requests.Session 连接复用，NDJSON 流式响应
+- **文件大小**：单次请求最大 20MB（可调），Flask 上传限制 50MB
 - **UI**：玻璃卡片风格（backdrop-filter），粒子特效，可拖拽网格布局
 
 ## 提速建议

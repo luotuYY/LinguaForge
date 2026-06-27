@@ -17,7 +17,7 @@ LinguaForge 前端采用纯 ES 模块架构：
   ```
   db  particles  utils
         ↑        ↑
-       state
+       state ←─── app (renderCallbacks)
       ↑     ↑
     render  tag / dedup
       ↑
@@ -32,7 +32,7 @@ LinguaForge 前端采用纯 ES 模块架构：
 |---|---|
 | `db.js` | IndexedDB 持久化层，内存缓存 + 异步写入，启动时自动迁移 localStorage |
 | `utils.js` | DOM 选择器、HTML 转义、搜索高亮、剪贴板、自然排序、Toast、Confirm/Tooltip |
-| `state.js` | 全局状态、LLM 参数、API 配置、Provider 切换、提示词模板 CRUD |
+| `state.js` | 全局状态、LLM 参数、API 配置、Provider 切换、提示词模板 CRUD、渲染回调注册 |
 | `render.js` | 预览列表 + 对比表格 DOM 渲染、搜索 UI、增量更新 |
 | `api.js` | 文件上传/解析、单条/批量翻译（NDJSON 流式）、文件列表管理 |
 | `app.js` | 事件编排、SPA 路由、翻译控制、导出、网格拖拽、行内编辑 |
@@ -57,10 +57,11 @@ localStorage key 以 `tllmh_` 前缀命名，保持向后兼容。
 
 ## 后端
 
-- `app.py`：Flask 后端，12 个 API 端点
+- `app.py`：Flask 后端，15 个 API 端点（翻译 8 + 分词 3 + 去重 3 + 通用 1）
 - `ThreadPoolExecutor` 并发 + `requests.Session` 连接复用
 - `threading.local()` 每线程独立 Session
-- NDJSON 流式响应：`_stream_batch_response()` + `queue.Queue` 桥接线程→Generator
+- NDJSON 流式响应：`_stream_batch_response()` / `_stream_batch_response_dedup()` + `queue.Queue` 桥接线程→Generator
+- 文件大小限制：单次请求 20MB（`MAX_CONTENT_LENGTH` 50MB）
 - 支持任何 `/v1/chat/completions` 端点的 LLM（本地或商业 API）
 
 ## PowerShell + Python 代码生成注意事项
