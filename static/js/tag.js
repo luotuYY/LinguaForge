@@ -4,7 +4,7 @@
  * Depends on: utils.js, db.js, state.js, api.js, render.js, app.js
  */
 
-import { $, escHtml, showToast, log, logChunk, setHighlight, hl, matches } from './utils.js';
+import { $, escHtml, showToast, setHighlight, hl, matches } from './utils.js';
 import { dbGet, dbSet, dbSetCache, dbHas, dbReady } from './db.js';
 import { state, rebuildIndicesAndCheckboxes, updateTranslateAllButton, resetInputDefault } from './state.js';
 import { renderFileList } from './api.js';
@@ -1136,7 +1136,7 @@ async function tagStart() {
       }
 
       var chunk = chunks[chunkIdx];
-      logChunk(chunkIdx + 1, totalChunks, chunk.length, total, 'tag');
+      tagLog('── 块 ' + (chunkIdx + 1) + '/' + totalChunks + ' ── 分词 ' + chunk.length + ' 条（累计 ' + Math.min((chunkIdx + 1) * chunk.length, total) + '/' + total) + '）');
 
       var tagLLM = {};
       var _tEl = document.getElementById('tagTemperature');
