@@ -5,7 +5,7 @@
  */
 
 
-import { $, escHtml, showToast, log, clearLog, naturalCompare, fallbackCopy } from './utils.js';
+import { $, escHtml, showToast, log, clearLog, naturalCompare, fallbackCopy, hl } from './utils.js';
 import { dbGet, dbSet } from './db.js';
 import { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, 
           updateTranslateAllButton, updateRetryButton, updateExportCheckedButton,
@@ -444,9 +444,8 @@ function editTranslation(index, evt) {
   var td = evt.currentTarget;
   if (td.querySelector('textarea')) return;
   var orig = line.new_translation;
-  td.innerHTML = '<textarea class="inline-edit" data-index="' + index + '" rows="1">' + escHtml(orig) + '</textarea>';
+  td.innerHTML = '<textarea class="inline-edit" data-index="' + index + '">' + escHtml(orig) + '</textarea>';
   var ta = td.querySelector('textarea');
-  requestAnimationFrame(function () { autoResizeTA(ta); });
   ta.focus();
   ta.select();
   ta.addEventListener('blur', function () { commitEditTA(ta, index); });
@@ -454,7 +453,6 @@ function editTranslation(index, evt) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEditTA(ta, index); }
     if (e.key === 'Escape') { line.new_translation = orig; ta.remove(); renderInternal.compareDirty = false; renderPreview(); renderCompare(); }
   });
-  ta.addEventListener('input', function () { autoResizeTA(ta); });
 }
 
 function commitEditTA(ta, index) {
@@ -465,11 +463,6 @@ function commitEditTA(ta, index) {
   renderInternal.compareDirty = false;
   updateCompareRow(index);
   updatePreviewLine(index);
-}
-
-function autoResizeTA(ta) {
-  ta.style.height = 'auto';
-  ta.style.height = ta.scrollHeight + 'px';
 }
 
 // ── 清除/保留译文 ──

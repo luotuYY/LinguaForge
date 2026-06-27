@@ -688,6 +688,30 @@ mark { background: var(--hl); color: #e0e4ff; padding: 0 2px; border-radius: 2px
   overflow-y: hidden;
   transition: height 0.1s ease;
 }
+/* 对比表新译文列：绝对定位编辑框，不撑大行高 */
+.compare-table .col-new {
+  position: relative;
+  overflow: visible !important;
+}
+.compare-table .col-new .inline-edit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  border-radius: 0;
+  resize: none;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.85);
+  border: 2px solid var(--accent);
+  padding: 6px 8px;
+  font-size: inherit;
+  line-height: inherit;
+  overflow-y: auto;
+  transition: none;
+}
 .cell-editable { cursor: pointer; transition: background 0.15s; }
 .cell-editable:hover { background: rgba(124,140,248,0.08); }
 
