@@ -106,8 +106,7 @@ function _entryId(e) {
 }
 
 function getDedupApiConfig() {
-    if (typeof window.getApiConfig === "function") return window.getApiConfig();
-    return { provider: "local" };
+    return getApiConfig();
 }
 
 // ── 增量更新整组 DOM（以组为单位） ──
@@ -181,43 +180,6 @@ function renderGroups() {
       updateSelectedCount();
       return;
     }
-
-    var html = "";
-    visibleKeys.forEach(function (key, gIdx) {
-      var entries = dedupState.groups[key];
-      var bestIdx = dedupState.bestIndices.get(key);
-      if (bestIdx == null) bestIdx = -1;
-
-      html += '<div class="dedup-group" data-group="' + gIdx + '">';
-      html += '<div class="dedup-group-header" data-action="toggle-group">';
-      html += '  <span class="dedup-group-toggle">▼</span>';
-      html += '  <span class="dedup-group-original">' + escHtml(key) + "</span>";
-      html += '  <span class="dedup-group-count">' + entries.length + " 条</span>";
-      if (bestIdx >= 0) {
-        html += '  <span class="dedup-group-best">最优：#' + (bestIdx + 1) + "</span>";
-      }
-      html += "</div>";
-      html += '<div class="dedup-group-body">';
-
-      entries.forEach(function (e, idx) {
-        var checked = !!dedupState.selected.get(_entryId(e));
-        var isBest = bestIdx >= 0 && idx === bestIdx;
-        var rowClass = checked ? " dedup-row-selected" : "";
-        if (isBest) rowClass += " dedup-row-best";
-
-        html +=
-          '<div class="dedup-row' + rowClass +
-          '" data-group="' + gIdx +
-          '" data-idx="' + idx +
-          '" data-action="select-row">';
-        html += '  <span class="dedup-row-original">' + escHtml(e.original) + "</span>";
-        html += '  <span class="dedup-row-trans">' + escHtml(e.translation) + "</span>";
-        html += '  <span class="dedup-row-file">' + escHtml(e.file) + "</span>";
-        html += "</div>";
-      });
-
-      html += "</div></div>";
-    });
 
     // Pagination
     var total = visibleKeys.length;
@@ -521,6 +483,31 @@ async function _streamOneChunk(groupsChunk, chunkIdx, chunkKeys, total, complete
           text.textContent = "评估进度: " + completed.val + "/" + total;
         } catch (e) {}
       }
+    }
+    // 处理 buffer 残留的最后一行
+    if (buffer.trim()) {
+      try {
+        var data = JSON.parse(buffer.trim());
+        completed.val++;
+        if (data.best_index !== undefined && data.best_index !== null) {
+          var key = chunkKeys[data.group_index];
+          if (key) {
+            var group = dedupState.groups[key];
+            group.forEach(function (e, idx) {
+              dedupState.selected.set(_entryId(e), idx === data.best_index);
+            });
+            dedupState.bestIndices.set(key, data.best_index);
+            var visibleIdx = dedupState.visibleKeys.indexOf(key);
+            _updateGroupDOM(key, visibleIdx);
+          }
+        } else if (data.error) {
+          errors.val++;
+        }
+        var fill = $("dedupProgressFill");
+        var text2 = $("dedupProgressText");
+        fill.style.width = (completed.val / total * 100) + "%";
+        text2.textContent = "评估进度: " + completed.val + "/" + total;
+      } catch (e) {}
     }
 }
 

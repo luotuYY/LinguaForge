@@ -171,7 +171,7 @@ function renderCompare() {
         '<td class="col-check"><input type="checkbox" class="row-check" data-index="' + l.index + '" data-action="compare-check" ' + (state.compareChecked.has(l.index) ? 'checked' : '') + '></td>' +
         '<td class="cell-copyable" data-action="copy-original" title="点击复制">' + hl(l.original) + '</td>' +
         '<td>' + (l.translation ? hl(l.translation) : '\u2014') + '</td>' +
-        '<td class="cell-editable" data-action="edit-translation" data-index="' + l.index + '" title="' + (l.warning ? l.warning : '点击编辑') + '">' +
+        '<td class="cell-editable col-new" data-action="edit-translation" data-index="' + l.index + '" title="' + (l.warning ? l.warning : '点击编辑') + '">' +
           (l.error ? '\u26A0' + escHtml(l.error) : l.new_translation === ' ' ? '<span class="cleared-mark">\u2014</span>' : hl(l.new_translation)) +
           (l.truncated ? ' <span title="响应被截断，翻译可能不完整" style="cursor:help">\u26A0\uFE0F</span>' : '') +
           (l.warning && !l.truncated ? ' <span title="' + escHtml(l.warning) + '" style="cursor:help;color:var(--yellow)">\u26A0\uFE0F</span>' : '') +
@@ -444,7 +444,6 @@ function updateCompareRow(index) {
         newCell.innerHTML = hl(l.new_translation) + extra;
       }
       newCell.className = 'cell-editable col-new';
-      newCell.onclick = function(e) { editTranslation(index, e); };
       newCell.title = l.warning || '点击编辑';
     }
     var keepBtn = row.querySelector('.col-actions button[onclick^="keepOld"]');
@@ -486,7 +485,6 @@ function updateCompareRow(index) {
     }
     // 恢复可编辑属性
     newCell.className = 'cell-editable col-new';
-    newCell.onclick = function(e) { editTranslation(index, e); };
     newCell.title = l.warning || '点击编辑';
   }
   // 更新"保留译文"按钮状态

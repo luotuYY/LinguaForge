@@ -7,6 +7,12 @@
 
 import { $, escHtml, showToast, log } from './utils.js';
 import { dbGet, dbSet, dbDel, dbHas, dbReady } from './db.js';
+// ── 渲染回调（由 app.js 注册，避免循环依赖） ──
+var _renderCallbacks = { preview: null, compare: null };
+function _notifyRender() {
+  if (_renderCallbacks.preview) _renderCallbacks.preview();
+  if (_renderCallbacks.compare) _renderCallbacks.compare();
+}
 // ── 全局状态 ──
 const state = {
   lines: [],
@@ -236,8 +242,7 @@ async function setMode(mode) {
       state.lines[i].warning = '';
       state.lines[i].degraded = false;
     }
-    renderPreview();
-    renderCompare();
+    _notifyRender();
     state.translateStarted = false;
   }
   if (_modeReady) saveModeParams(state.translateMode);
@@ -693,7 +698,7 @@ function importPrompts() {
             '<div class="modal-actions"><button class="btn btn-primary" id="importPreviewOk">确认导入</button><button class="btn" id="importPreviewCancel">取消</button></div></div>';
           document.body.appendChild(modal);
           modal.addEventListener('click', function(ev) { if (ev.target === modal) modal.style.display = 'none'; });
-          document.addEventListener('keydown', function(ev) { if (ev.key === 'Escape') modal.style.display = 'none'; });
+          document.addEventListener('keydown', function(ev) { if (ev.key === 'Escape' && modal.style.display === 'flex') modal.style.display = 'none'; });
         }
         document.getElementById('importPreviewBody').innerHTML = previewHtml;
         modal.style.display = 'flex';
@@ -747,7 +752,7 @@ function updateRetryButton() {
   // btnRetrySelected 常亮，由 retrySelected() 自行处理无选中
 }
 function updateExportCheckedButton() {
-  var btn = btnExportChecked;
+  var btn = document.getElementById('btnExportChecked');
   if (btn) btn.disabled = state.previewChecked.size === 0 && state.compareChecked.size === 0;
 }
 
@@ -771,4 +776,9 @@ document.addEventListener('visibilitychange', function () {
 });
 
 // ── Module exports ──
-export { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, DIRECT_DEFAULT, POLISH_DIRECT_DEFAULT, POLISH_STEP2_DEFAULT, getPolishStep2Prompt, setPolishStep2Prompt, LLM_PARAM_DEFAULTS, resetInputDefault, resetParamDefault, saveModeParams, loadModeParams, getLLMParams, setMode, updateTranslateAllButton, getApiConfig, loadApiConfig, saveApiConfig, testApiConnection, setProvider, onThinkingChange, checkLLM, loadDefaults, savePolishStrategy, showPromptBar, onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt, renderSavedPrompts, togglePrompt, resetSystemPrompt, exportPrompts, importPrompts, updateManualBtn, updateRetryButton, updateExportCheckedButton, promptKey };
+function registerRenderCallbacks(previewFn, compareFn) {
+  _renderCallbacks.preview = previewFn;
+  _renderCallbacks.compare = compareFn;
+}
+
+export { state, rebuildIndicesAndCheckboxes, PRESET_PROMPTS, DIRECT_DEFAULT, POLISH_DIRECT_DEFAULT, POLISH_STEP2_DEFAULT, getPolishStep2Prompt, setPolishStep2Prompt, LLM_PARAM_DEFAULTS, resetInputDefault, resetParamDefault, saveModeParams, loadModeParams, getLLMParams, setMode, updateTranslateAllButton, getApiConfig, loadApiConfig, saveApiConfig, testApiConnection, setProvider, onThinkingChange, checkLLM, loadDefaults, savePolishStrategy, showPromptBar, onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt, renderSavedPrompts, togglePrompt, resetSystemPrompt, exportPrompts, importPrompts, updateManualBtn, updateRetryButton, updateExportCheckedButton, promptKey, registerRenderCallbacks };

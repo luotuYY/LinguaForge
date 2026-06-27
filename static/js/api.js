@@ -277,6 +277,7 @@ async function translateBatchItems(items) {
   $('progressText').textContent = '进度: 0/' + total + ' · 并发' + concurrency + ' · 块0/' + totalChunks;
   log('开始' + (mode === 'polish' ? '润色' : '翻译') + '，共 ' + total + ' 行，并发 ' + concurrency + '，分 ' + totalChunks + ' 块');
 
+  var _parseErrLogged = false;
   try {
     for (var chunkIdx = 0; chunkIdx < totalChunks; chunkIdx++) {
       // 块间检查停止信号
@@ -330,7 +331,9 @@ async function translateBatchItems(items) {
                 done++;
                 updateCompareRow(chunk[pos].index);
               }
-            } catch (parseErr) {}
+            } catch (parseErr) {
+              if (!_parseErrLogged) { _parseErrLogged = true; log('JSON 解析失败: ' + lines[li].substring(0, 80), 'err'); }
+            }
           }
           $('progressFill').style.width = (done / total * 100) + '%';
           var successCount = done - errors;

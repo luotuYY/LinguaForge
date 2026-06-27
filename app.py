@@ -972,8 +972,8 @@ def dedup_apply():
         return jsonify({"error": "缺少文件原始内容"}), 400
     # 防止请求体过大导致 OOM
     total_size = sum(len(c.encode("utf-8")) for c in file_contents.values())
-    if total_size > 10 * 1024 * 1024:
-        return jsonify({"error": "文件总大小超过 10 MB 限制，请分批处理"}), 413
+    if total_size > 20 * 1024 * 1024:
+        return jsonify({"error": "文件总大小超过 20 MB 限制，请分批处理"}), 413
 
     # 按文件收集选中行号
     file_selected = {}

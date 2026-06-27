@@ -22,7 +22,7 @@ import { renderInternal, getCheckedFileNames, renderPreview, renderCompare, upda
 import { setProvider, setMode, saveModeParams, saveApiConfig, testApiConnection,
           onThinkingChange, togglePrompt, resetSystemPrompt, savePolishStrategy,
           onTitleFocus, savePrompt, loadSavedPrompt, deletePrompt,
-          exportPrompts, importPrompts, resetInputDefault } from './state.js';
+          exportPrompts, importPrompts, resetInputDefault, registerRenderCallbacks } from './state.js';
 import { onPreviewRowLimitChange, onPreviewCustomLimitChange, initPreviewRowLimit, toggleSort } from './render.js';
 import { tagInit, tagLoadManualInput, tagClearAll, tagOnSearch, tagOnRowLimitChange, tagOnCustomLimitChange,
           tagStart, tagStop, tagExportDialog, tagImportDialog, tagToggleCatPanel, tagToggleStrategy,
@@ -958,6 +958,9 @@ function triggerDownload(filename, fcontent) {
       if (exportOpts && exportOpts.classList.contains('visible')) cancelExport();
     }
   });
+
+  // ── 注册渲染回调（供 state.js setMode 调用，避免循环依赖） ──
+  registerRenderCallbacks(renderPreview, renderCompare);
 
   // ── 确认弹窗：点击遮罩关闭 ──
   var confirmModal = $('confirmModal');
