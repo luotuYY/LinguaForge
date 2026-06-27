@@ -5,7 +5,7 @@
  */
 
 
-import { $, escHtml, showToast, log } from './utils.js';
+import { $, escHtml, showToast, log, showConfirm } from './utils.js';
 import { dbGet, dbSet, dbDel, dbHas, dbReady } from './db.js';
 // ── 渲染回调（由 app.js 注册，避免循环依赖） ──
 var _renderCallbacks = { preview: null, compare: null };
